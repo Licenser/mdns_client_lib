@@ -1,0 +1,13 @@
+{application, zmq_mdns_client,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { zmq_mdns_client_app, []}},
+  {env, [{domain, ".local"},
+	 {service, "generic"}]}
+ ]}.
