@@ -107,16 +107,12 @@ send_msg(Ctx, Msg, [{_, _, Socket} = S | Active], Servers) ->
 		{ok, <<"pong">>} ->
 		    case erlzmq:send(Socket, term_to_binary(Msg), [{timeout, 100}]) of
 			ok ->
-			    io:format("1~n"),
 			    case erlzmq:recv(Socket) of
 				{ok, Res} ->
-				    io:format("2~n"),
 				    case binary_to_term(Res) of
 					noreply ->
-					    io:format("3~n"),
 					    {noreply, Active ++ [S], Servers};
 					{reply, Reply} ->
-					    io:format("4~n"),
 					    {{ok, Reply}, Active ++ [S], Servers}
 				    end;
 				_E ->
@@ -162,7 +158,6 @@ handle_cast({add, Server, Options},
 		   ctx = Ctx} = State) ->
     case lists:keyfind(Server, 1, Active ++ Servers) of
 	false ->
-	    io:format("add server ~p~n", [Server]),
 	    case length(Active) of
 		A when A < 3 ->
 		    {ip, IP} = lists:keyfind(ip, 1, Options),

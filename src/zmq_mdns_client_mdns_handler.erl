@@ -25,12 +25,10 @@ terminate(Error, State) ->
 			       {state, State}]).
 
 handle_event({service_add, _Type, Host, Options}, State) ->
-    io:format("Service add: ~p (~p)~n" , [Host, Options]),
     zmq_mdns_client_server:add_endpoint(Host, Options),
     {ok, State};
 
 handle_event({service_remove, _Type, Host}, State) ->
-    io:format("Service remove: ~p~n" , [Host]),
     zmq_mdns_client_server:remove_endpoint(Host),
     {ok, State}.
 
