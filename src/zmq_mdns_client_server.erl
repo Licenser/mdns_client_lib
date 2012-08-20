@@ -101,28 +101,49 @@ send_msg(_, _, [], []) ->
     {{error, no_servers}, [], []};
 
 send_msg(Ctx, Msg, [{_, _, Socket} = S | Active], Servers) ->
-    case erlzmq:send(Socket, term_to_binary(Msg)) of
+    case erlzmq:send(Socket, term_to_binary(ping), [{timeout, 50}]) of
 	ok ->
-	    {ok, Res} = erlzmq:recv(Socket),
-	    case binary_to_term(Res) of
-		noreply ->
-		    {noreply, Active ++ [S], Servers};
-		{reply, Reply} ->
-		    {{ok, Reply}, Active ++ [S], Servers}
-	    end;
-	_E ->
-	    erlzmq:close(Socket),
-	    
-	    [{S, Options} | Servers1] = Servers,
-
-	    {ip, IP} = lists:keyfind(ip, 1, Options),
-	    {port, Port} = lists:keyfind(port, 1, Options),
-	    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-	    Active1 = Active  ++ [{S, Options, Socket}],
-
-	    	    
-	    send_msg(Ctx, Msg, Active1, Servers1)
+	    case erlzmq:recv(Socket, [{timeout, 50}]) of			
+		{ok, <<"pong">>} ->
+		    case erlzmq:send(Socket, term_to_binary(Msg), [{timeout, 100}]) of
+			ok ->
+			    io:format("1~n"),
+			    case erlzmq:recv(Socket) of
+				{ok, Res} ->
+				    io:format("2~n"),
+				    case binary_to_term(Res) of
+					noreply ->
+					    io:format("3~n"),
+					    {noreply, Active ++ [S], Servers};
+					{reply, Reply} ->
+					    io:format("4~n"),
+					    {{ok, Reply}, Active ++ [S], Servers}
+				    end;
+				_E ->
+				    erlzmq:close(Socket),
+				    {Servers1, Active1} = next_server(Ctx, Active, Servers),
+				    send_msg(Ctx, Msg, Active1, Servers1)
+			    end;
+			_E ->
+			    erlzmq:close(Socket),
+			    {Servers1, Active1} = next_server(Ctx, Active, Servers),
+			    send_msg(Ctx, Msg, Active1, Servers1)
+		    end;
+		_E ->
+		    erlzmq:close(Socket),
+		    {Servers1, Active1} = next_server(Ctx, Active, Servers),
+		    send_msg(Ctx, Msg, Active1, Servers1)
+	    end
     end.
+
+next_server(_Ctx, Active, []) ->
+    {[], Active};		  
+
+next_server(Ctx, Active, [{S, Options} | Servers]) ->
+    {ip, IP} = lists:keyfind(ip, 1, Options),
+    {port, Port} = lists:keyfind(port, 1, Options),
+    Socket1 = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
+    {Servers, Active  ++ [{S, Options, Socket1}]}.
     
 
 %%--------------------------------------------------------------------
