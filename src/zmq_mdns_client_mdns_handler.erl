@@ -9,8 +9,8 @@
 	 code_change/3,
 	 handle_call/2]).
 
-init(_) ->
-    {ok, stateless}.
+init([Type, Pid]) ->
+    {ok, {Type, Pid}}.
 
 terminate(remove_handler, _) ->
     ok;
@@ -24,18 +24,21 @@ terminate(Error, State) ->
 			       {error, Error},
 			       {state, State}]).
 
-handle_event({service_add, _Type, Host, Options}, State) ->
-    zmq_mdns_client_server:add_endpoint(Host, Options),
-    {ok, State};
+handle_event({service_add, Type, Host, Options}, {Type, Pid}) ->
+    zmq_mdns_client_server:add_endpoint(Pid, Host, Options),
+    {ok, {Type, Pid}};
 
-handle_event({service_remove, _Type, Host}, State) ->
-    zmq_mdns_client_server:remove_endpoint(Host),
+handle_event({service_remove, Type, Host}, {Type, Pid}) ->
+    zmq_mdns_client_server:remove_endpoint(Pid, Host),
+    {ok, {Type, Pid}};
+
+handle_event(_, State) ->
     {ok, State}.
 
 handle_info({'EXIT', _, shutdown}, _) ->
     remove_handler.
 
-code_change(_,_, State) ->
+code_change(_, _, State) ->
     {ok, State}.
 		   
 handle_call(_, State) ->

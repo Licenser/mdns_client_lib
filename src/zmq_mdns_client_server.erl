@@ -12,9 +12,9 @@
 
 %% API
 -export([start_link/0,
-	 send/1,
-	 add_endpoint/2,
-	 remove_endpoint/1]).
+	 send/2,
+	 add_endpoint/3,
+	 remove_endpoint/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,14 +32,14 @@
 %%% API
 %%%===================================================================
 
-add_endpoint(Server, Options) ->
-    gen_server:cast(?MODULE, {add, Server, Options}).
+add_endpoint(Pid, Server, Options) ->
+    gen_server:cast(Pid, {add, Server, Options}).
 
-remove_endpoint(Server) ->
-    gen_server:cast(?MODULE, {remove, Server}).
+remove_endpoint(Pid, Server) ->
+    gen_server:cast(Pid, {remove, Server}).
 
-send(Message) ->
-    gen_server:call(?MODULE, {send, Message}).
+send(Pid, Message) ->
+    gen_server:call(Pid, {send, Message}).
 
 
 %%--------------------------------------------------------------------
@@ -50,7 +50,7 @@ send(Message) ->
 %% @end
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link(?MODULE, [], []).
 
 %%%===================================================================
 %%% gen_server callbacks

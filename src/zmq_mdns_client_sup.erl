@@ -24,5 +24,5 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, { {one_for_one, 5, 10}, [?CHILD(zmq_mdns_client_server, worker)]} }.
+    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(zmq_mdns_client_server, worker)]}}.
 
