@@ -28,8 +28,8 @@ handle_event({service_add, Type, Host, Options}, {Type, Pid}) ->
     zmq_mdns_client_server:add_endpoint(Pid, Host, Options),
     {ok, {Type, Pid}};
 
-handle_event({service_remove, Type, Host}, {Type, Pid}) ->
-    zmq_mdns_client_server:remove_endpoint(Pid, Host),
+handle_event({service_remove, Type, Host, Options}, {Type, Pid}) ->
+    zmq_mdns_client_server:remove_endpoint(Pid, Host, Options),
     {ok, {Type, Pid}};
 
 handle_event(_, State) ->

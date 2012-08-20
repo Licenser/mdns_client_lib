@@ -14,7 +14,8 @@
 -export([start_link/0,
 	 send/2,
 	 add_endpoint/3,
-	 remove_endpoint/2]).
+	 remove_endpoint/2,
+	 servers/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,6 +38,9 @@ add_endpoint(Pid, Server, Options) ->
 
 remove_endpoint(Pid, Server) ->
     gen_server:cast(Pid, {remove, Server}).
+
+servers(Pid) ->
+        gen_server:call(Pid, servers).
 
 send(Pid, Message) ->
     gen_server:call(Pid, {send, Message}).
@@ -86,6 +90,12 @@ init([]) ->
 %% @end
 %%--------------------------------------------------------------------
 
+handle_call(servers, _From, #state{
+		       active = Active,
+		       servers = Servers} = State) ->
+    {reply, {[D || {D, _} <- Active],
+	     [D || {D} <- Servers]}, State};
+
 handle_call({send, Message}, _From, #state{ctx = Ctx, 
 					   active = Active,
 					   servers = Servers} = State) ->
@@ -100,7 +110,7 @@ handle_call(_Request, _From, State) ->
 send_msg(_, _, [], []) ->
     {{error, no_servers}, [], []};
 
-send_msg(Ctx, Msg, [{_, _, Socket} = S | Active], Servers) ->
+send_msg(Ctx, Msg, [{_, Socket} = S | Active], Servers) ->
     case erlzmq:send(Socket, term_to_binary(ping), [{timeout, 50}]) of
 	ok ->
 	    case erlzmq:recv(Socket, [{timeout, 50}]) of			
@@ -135,11 +145,11 @@ send_msg(Ctx, Msg, [{_, _, Socket} = S | Active], Servers) ->
 next_server(_Ctx, Active, []) ->
     {[], Active};		  
 
-next_server(Ctx, Active, [{S, Options} | Servers]) ->
+next_server(Ctx, Active, [{{S, Options}} | Servers]) ->
     {ip, IP} = lists:keyfind(ip, 1, Options),
     {port, Port} = lists:keyfind(port, 1, Options),
     Socket1 = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-    {Servers, Active  ++ [{S, Options, Socket1}]}.
+    {Servers, Active  ++ [{{S, Options}, Socket1}]}.
     
 
 %%--------------------------------------------------------------------
@@ -152,42 +162,43 @@ next_server(Ctx, Active, [{S, Options} | Servers]) ->
 %%                                  {stop, Reason, State}
 %% @end
 %%--------------------------------------------------------------------
+    
 handle_cast({add, Server, Options}, 
 	    #state{active = Active,
 		   servers = Servers,
 		   ctx = Ctx} = State) ->
-    case lists:keyfind(Server, 1, Active ++ Servers) of
+    case lists:keyfind({Server, Options}, 1, Active ++ Servers) of
 	false ->
 	    case length(Active) of
 		A when A < 3 ->
 		    {ip, IP} = lists:keyfind(ip, 1, Options),
 		    {port, Port} = lists:keyfind(port, 1, Options),
 		    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-		    {noreply, State#state{active=[{Server, Options, Socket} | Active]}};
+		    {noreply, State#state{active=[{{Server, Options}, Socket} | Active]}};
 		_ ->
-		    {noreply, State#state{servers=[{Server, Options} | Servers]}}
+		    {noreply, State#state{servers=[{{Server, Options}} | Servers]}}
 	    end;
 	_ ->
 	    {noreply, State}
     end;
 
 
-handle_cast({remove, Server}, 
+handle_cast({remove, Server, Options}, 
 	    #state{servers = Servers,
 		   active = Active,
 		   ctx = Ctx
 		  } = State) ->
-    case lists:keyfind(Server, 1, Active) of
+    case lists:keyfind({Server, Options}, 1, Active) of
 	false ->
-	    Servers1 = lists:keydelete(Server, 1, Servers),
+	    Servers1 = lists:keydelete({Server, Options}, 1, Servers),
 	    {noreply, State#state{servers=Servers1}};
-	{Server, _, Socket} ->
+	{{Server, Options}, Socket} ->
 	    erlzmq:close(Socket),
-	    [{S, Options} | Servers1] = Servers,
+	    [{{S, Options1}} | Servers1] = Servers,
 	    {ip, IP} = lists:keyfind(ip, 1, Options),
 	    {port, Port} = lists:keyfind(port, 1, Options),
 	    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-	    Active1 = [{S, Options, Socket} | lists:keydelete(Server, 1, Active)],
+	    Active1 = [{{S, Options1}, Socket} | lists:keydelete({Server, Options}, 1, Active)],
 	    {noreply, State#state{servers=Servers1,
 				  active=Active1}}
     end;
