@@ -14,7 +14,7 @@
 -export([start_link/0,
 	 send/2,
 	 add_endpoint/3,
-	 remove_endpoint/2,
+	 remove_endpoint/3,
 	 servers/1]).
 
 %% gen_server callbacks
@@ -36,8 +36,8 @@
 add_endpoint(Pid, Server, Options) ->
     gen_server:cast(Pid, {add, Server, Options}).
 
-remove_endpoint(Pid, Server) ->
-    gen_server:cast(Pid, {remove, Server}).
+remove_endpoint(Pid, Server, Options) ->
+    gen_server:cast(Pid, {remove, Server, Options}).
 
 servers(Pid) ->
         gen_server:call(Pid, servers).
