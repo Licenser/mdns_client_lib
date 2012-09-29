@@ -186,6 +186,8 @@ handle_cast({remove, Server, Options},
 		    [F() || F <- Fns],
 		    {noreply, State#state{servers=[],
 					  active=[]}};
+		{Active1, []} ->
+		    {noreply, State#state{active=Active1}};
 		{Active1, [{{S, Options1}} | Servers1]} ->
 		    {ip, IP} = lists:keyfind(ip, 1, Options),
 		    {port, Port} = lists:keyfind(port, 1, Options),
