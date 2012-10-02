@@ -11,25 +11,20 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0,
+-export([start_link/1,
 	 send/2,
 	 add_endpoint/3,
 	 remove_endpoint/3,
-	 register_on_connect/2,
-	 register_on_disconnect/2,
 	 servers/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
 	 terminate/2, code_change/3]).
 
--define(SERVER, ?MODULE). 
-
 -record(state, {
 	  active = [],
 	  servers = [],
-	  connect_fns = [],
-	  disconnect_fns = [],
+	  service,
 	  ctx
 	 }).
 
@@ -49,22 +44,15 @@ servers(Pid) ->
 send(Pid, Message) ->
     gen_server:call(Pid, {send, Message}).
 
-register_on_connect(Pid, Fn) ->
-    gen_server:cast(Pid, {on_connect, Fn}).
-
-register_on_disconnect(Pid, Fn) ->
-    gen_server:cast(Pid, {on_disconnect, Fn}).
-
-
 %%--------------------------------------------------------------------
 %% @doc
 %% Starts the server
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Service) -> {ok, Pid} | ignore | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link(?MODULE, [], []).
+start_link(Service) ->
+    gen_server:start_link(?MODULE, [Service], []).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -81,9 +69,15 @@ start_link() ->
 %%                     {stop, Reason}
 %% @end
 %%--------------------------------------------------------------------
-init([]) ->
+init([Service]) ->
+    Type = "_" ++ Service ++ "._zeromq._tcp",
+    mdns_client:add_type("_" ++ Service ++ "._zeromq._tcp"),
+    ok = mdns_node_discovery_event:add_handler(
+	   zmq_mdns_client_mdns_handler, 
+	   [list_to_binary(Type), self()]),
     {ok, Ctx} = erlzmq:context(),
-    {ok, #state{ctx = Ctx}}.
+    {ok, #state{ctx = Ctx,
+		service = Service}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -129,18 +123,10 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({on_connect, Fn},
-	    #state{connect_fns = Fns} = State) ->
-    {noreply, State#state{connect_fns = [Fn | Fns]}};
-
-handle_cast({on_disconnect, Fn},
-	    #state{disconnect_fns = Fns} = State) ->
-    {noreply, State#state{disconnect_fns = [Fn | Fns]}};
-
 handle_cast({add, Server, Options}, 
 	    #state{active = Active,
 		   servers = Servers,
-		   connect_fns = Fns,
+		   service = Service,
 		   ctx = Ctx} = State) ->
     case lists:keyfind({Server, Options}, 1, Active ++ Servers) of
 	false ->
@@ -151,7 +137,7 @@ handle_cast({add, Server, Options},
 		    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
 		    if 
 			A == 0 ->
-			    [ F() || F <- Fns];
+			    zmq_mnds_connection_event:notify_connect(Service);
 			true ->
 			    ok
 		    end,
@@ -167,14 +153,14 @@ handle_cast({add, Server, Options},
 handle_cast({remove, Server, Options}, 
 	    #state{servers = Servers,
 		   active = Active,
-		   disconnect_fns = Fns,
+		   service = Service,
 		   ctx = Ctx
 		  } = State) ->
     case lists:keyfind({Server, Options}, 1, Active) of
 	false ->
 	    case {Active, lists:keydelete({Server, Options}, 1, Servers)} of
 		{[], []}->
-		    [F() || F <- Fns],
+		    zmq_mnds_connection_event:notify_disconnect(Service),
 		    {noreply, State#state{servers=[]}};
 		{_, Servers1} ->
 		    {noreply, State#state{servers=Servers1}}
@@ -183,7 +169,7 @@ handle_cast({remove, Server, Options},
 	    erlzmq:close(Socket),
 	    case {lists:keydelete({Server, Options}, 1, Active), Servers} of
 		{[], []}->
-		    [F() || F <- Fns],
+		    zmq_mnds_connection_event:notify_disconnect(Service),
 		    {noreply, State#state{servers=[],
 					  active=[]}};
 		{Active1, []} ->

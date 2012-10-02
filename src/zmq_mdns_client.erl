@@ -16,15 +16,8 @@ register_on_connect(Pid, Fn) ->
 register_on_disconnect(Pid, Fn) ->
     zmq_mdns_client_server:register_on_disconnect(Pid, Fn).
 
-
 instance(Service) ->
-    Type = "_" ++ Service ++ "._zeromq._tcp",
-    mdns_client:add_type("_" ++ Service ++ "._zeromq._tcp"),
-    {ok, Pid} = supervisor:start_child(zmq_mdns_client_sup, []),
-    ok = mdns_node_discovery_event:add_handler(
-	   zmq_mdns_client_mdns_handler, 
-	   [list_to_binary(Type), Pid]),
-    {ok, Pid}.
+    supervisor:start_child(zmq_mdns_client_sup, [Service]).
 
 start() ->
     application:start(zmq_mdns_client).
