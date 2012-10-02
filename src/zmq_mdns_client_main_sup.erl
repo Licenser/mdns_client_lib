@@ -25,6 +25,6 @@ init([]) ->
 				  {zmq_mdns_client_sup, start_link, []}, 
 				  permanent, 5000, supervisor, [zmq_mdns_client_sup]},
 				 {zmq_mdns_connection_responder, 
-				  {gen_event, start_link, [{local, zmq_mnds_connection_event}]},
+				  {gen_event, start_link, [{local, zmq_mdns_connection_event}]},
 				  permanent, 5000, worker, []}]}}.
 

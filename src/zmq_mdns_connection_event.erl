@@ -1,4 +1,5 @@
--module(zmq_mnds_connection_event).
+-module(zmq_mdns_connection_event).
+
 -export([add_handler/1,
 	 add_handler/2,
 	 notify_connect/1,

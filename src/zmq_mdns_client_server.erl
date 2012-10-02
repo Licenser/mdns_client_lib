@@ -137,7 +137,7 @@ handle_cast({add, Server, Options},
 		    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
 		    if 
 			A == 0 ->
-			    zmq_mnds_connection_event:notify_connect(Service);
+			    zmq_mdns_connection_event:notify_connect(Service);
 			true ->
 			    ok
 		    end,
@@ -160,7 +160,7 @@ handle_cast({remove, Server, Options},
 	false ->
 	    case {Active, lists:keydelete({Server, Options}, 1, Servers)} of
 		{[], []}->
-		    zmq_mnds_connection_event:notify_disconnect(Service),
+		    zmq_mdns_connection_event:notify_disconnect(Service),
 		    {noreply, State#state{servers=[]}};
 		{_, Servers1} ->
 		    {noreply, State#state{servers=Servers1}}
@@ -169,7 +169,7 @@ handle_cast({remove, Server, Options},
 	    erlzmq:close(Socket),
 	    case {lists:keydelete({Server, Options}, 1, Active), Servers} of
 		{[], []}->
-		    zmq_mnds_connection_event:notify_disconnect(Service),
+		    zmq_mdns_connection_event:notify_disconnect(Service),
 		    {noreply, State#state{servers=[],
 					  active=[]}};
 		{Active1, []} ->
