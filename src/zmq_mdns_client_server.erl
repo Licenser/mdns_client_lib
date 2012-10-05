@@ -22,10 +22,8 @@
 	 terminate/2, code_change/3]).
 
 -record(state, {
-	  active = [],
-	  servers = [],
-	  service,
-	  ctx
+	  servers = {[], []},
+	  service
 	 }).
 
 %%%===================================================================
@@ -73,11 +71,9 @@ init([Service]) ->
     Type = "_" ++ Service ++ "._zeromq._tcp",
     mdns_client:add_type("_" ++ Service ++ "._zeromq._tcp"),
     ok = mdns_node_discovery_event:add_handler(
-	   zmq_mdns_client_mdns_handler, 
+	   zmq_mdns_client_mdns_handler,
 	   [list_to_binary(Type), self()]),
-    {ok, Ctx} = erlzmq:context(),
-    {ok, #state{ctx = Ctx,
-		service = Service}}.
+    {ok, #state{service = Service}}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -94,18 +90,12 @@ init([Service]) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_call(servers, _From, #state{
-		       active = Active,
-		       servers = Servers} = State) ->
-    {reply, {[D || {D, _} <- Active],
-	     [D || {D} <- Servers]}, State};
+handle_call(servers, _From, #state{servers = {Servers, R}} = State) ->
+    {reply, Servers++R, State};
 
-handle_call({send, Message}, _From, #state{ctx = Ctx, 
-					   active = Active,
-					   servers = Servers} = State) ->
-    {Res, Active1, Servers1} = send_msg(Ctx, Message, Active, Servers),
-    {reply, Res, State#state{active = Active1,
-			     servers = Servers1}};
+handle_call({send, Message}, _From, #state{servers = Servers} = State) ->
+    {Res, Servers1} = send_msg(Message, Servers),
+    {reply, Res, State#state{servers = Servers1}};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -124,65 +114,47 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast({add, Server, Options}, 
-	    #state{active = Active,
-		   servers = Servers,
-		   service = Service,
-		   ctx = Ctx} = State) ->
-    case lists:keyfind({Server, Options}, 1, Active ++ Servers) of
+	    #state{servers = {Servers, ServersR},
+		   service = Service} = State) ->
+    case lists:keyfind({Server, Options}, 1, Servers) of
 	false ->
-	    case length(Active) of
-		A when A < 3 ->
-		    {ip, IP} = lists:keyfind(ip, 1, Options),
-		    {port, Port} = lists:keyfind(port, 1, Options),
-		    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-		    if 
-			A == 0 ->
-			    zmq_mdns_connection_event:notify_connect(Service);
-			true ->
-			    ok
-		    end,
-		    {noreply, State#state{active=[{{Server, Options}, Socket} | Active]}};
+	    {ip, IP} = lists:keyfind(ip, 1, Options),
+	    {port, Port} = lists:keyfind(port, 1, Options),
+	    IPort = list_to_integer(binary_to_list(Port)),
+	    IPS = binary_to_list(IP),
+	    case Servers of
+		[] ->
+		    zmq_mdns_connection_event:notify_connect(Service);
 		_ ->
-		    {noreply, State#state{servers=[{{Server, Options}} | Servers]}}
-	    end;
+		    ok
+	    end,
+	    {noreply, State#state{servers={[{{Server, Options}, IPS, IPort} | Servers], ServersR}}};
 	_ ->
 	    {noreply, State}
     end;
 
 
+handle_cast({remove, _Server, _Options},
+	    #state{servers = {[], []}} = State) -> 
+    {noreply, State};
+
 handle_cast({remove, Server, Options}, 
-	    #state{servers = Servers,
-		   active = Active,
-		   service = Service,
-		   ctx = Ctx
-		  } = State) ->
-    case lists:keyfind({Server, Options}, 1, Active) of
-	false ->
-	    case {Active, lists:keydelete({Server, Options}, 1, Servers)} of
-		{[], []}->
-		    zmq_mdns_connection_event:notify_disconnect(Service),
-		    {noreply, State#state{servers=[]}};
-		{_, Servers1} ->
-		    {noreply, State#state{servers=Servers1}}
-	    end;
-	{{Server, Options}, Socket} ->
-	    erlzmq:close(Socket),
-	    case {lists:keydelete({Server, Options}, 1, Active), Servers} of
-		{[], []}->
-		    zmq_mdns_connection_event:notify_disconnect(Service),
-		    {noreply, State#state{servers=[],
-					  active=[]}};
-		{Active1, []} ->
-		    {noreply, State#state{active=Active1}};
-		{Active1, [{{S, Options1}} | Servers1]} ->
-		    {ip, IP} = lists:keyfind(ip, 1, Options),
-		    {port, Port} = lists:keyfind(port, 1, Options),
-		    Socket = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-		    Active1 = [{{S, Options1}, Socket} | Active1],
-		    {noreply, State#state{servers=Servers1,
-					  active=Active1}}
-	    end
-    end;
+	    #state{servers = {[{{Server, Options}, _, _}], []},
+		   service = Service} = State) ->
+    zmq_mdns_connection_event:notify_disconnect(Service),
+    {noreply, State#state{servers = {[], []}}};
+
+handle_cast({remove, Server, Options}, 
+	    #state{servers = {[], [{{Server, Options}, _, _}]},
+		   service = Service} = State) ->
+    zmq_mdns_connection_event:notify_disconnect(Service),
+    {noreply, State#state{servers = {[], []}}};
+
+handle_cast({remove, Server, Options}, 
+	    #state{servers = {Servers, ServersR}} = State) ->
+    {noreply, State#state{
+		servers = {lists:keydelete({Server, Options}, 1, Servers), 
+			   lists:keydelete({Server, Options}, 1, ServersR)}}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
@@ -211,12 +183,7 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{
-	    active = Active,
-	    ctx = Ctx
-	   } = _State) ->
-    [erlzmq:close(Socket) || {_, _, Socket} <- Active],
-    erlzmq:term(Ctx),
+terminate(_Reason, _State) ->
     ok.
 
 %%--------------------------------------------------------------------
@@ -234,54 +201,32 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+send_msg(_, {[], []}) ->
+    {{error, no_servers}, {[], []}};
 
-create_zmq(Ctx, IP, Port) ->
-    Endpoint = "tcp://" ++ IP ++ ":" ++ Port,
-    {ok, Socket} = erlzmq:socket(Ctx, [req, {active, false}]),
-    erlzmq:setsockopt(Socket, linger, 0),
-    ok = erlzmq:connect(Socket, Endpoint),
-    Socket.
+send_msg(Msg, {[], Servers}) ->
+    send_msg(Msg, {Servers, []});
 
-send_msg(_, _, [], []) ->
-    {{error, no_servers}, [], []};
-
-send_msg(Ctx, Msg, [{_, Socket} = S | Active], Servers) ->
-    case erlzmq:send(Socket, term_to_binary(ping), [{timeout, 50}]) of
-	ok ->
-	    case erlzmq:recv(Socket, [{timeout, 50}]) of			
-		{ok, <<"pong">>} ->
-		    case erlzmq:send(Socket, term_to_binary(Msg), [{timeout, 100}]) of
-			ok ->
-			    case erlzmq:recv(Socket) of
-				{ok, Res} ->
-				    case binary_to_term(Res) of
-					noreply ->
-					    {noreply, Active ++ [S], Servers};
-					{reply, Reply} ->
-					    {{ok, Reply}, Active ++ [S], Servers}
-				    end;
-				_E ->
-				    erlzmq:close(Socket),
-				    {Servers1, Active1} = next_server(Ctx, Active, Servers),
-				    send_msg(Ctx, Msg, Active1, Servers1)
+send_msg(Msg, {[{_, IP, Port}=Server| Servers], ServersR}) ->
+    case gen_tcp:connect(IP, Port, [binary, {active,false}]) of
+	{ok, Socket} ->
+	    case gen_tcp:send(Socket, term_to_binary(Msg)) of
+		ok ->
+		    case gen_tcp:recv(Socket, 0) of
+			{ok, Res} ->
+			    gen_tcp:close(Socket),
+			    case binary_to_term(Res) of
+				noreply ->
+				    {noreply, {Servers, [Server | ServersR]}};
+				{reply, Reply} ->
+				    {{ok, Reply}, {Servers, [Server | ServersR]}}
 			    end;
-			_E ->
-			    erlzmq:close(Socket),
-			    {Servers1, Active1} = next_server(Ctx, Active, Servers),
-			    send_msg(Ctx, Msg, Active1, Servers1)
+			_ ->
+			    send_msg(Msg, {Servers, ServersR})
 		    end;
-		_E ->
-		    erlzmq:close(Socket),
-		    {Servers1, Active1} = next_server(Ctx, Active, Servers),
-		    send_msg(Ctx, Msg, Active1, Servers1)
-	    end
+		_ ->
+		    send_msg(Msg, {Servers, ServersR})
+	    end;
+	_ ->
+	    send_msg(Msg, {Servers, ServersR})
     end.
-
-next_server(_Ctx, Active, []) ->
-    {[], Active};		  
-
-next_server(Ctx, Active, [{{S, Options}} | Servers]) ->
-    {ip, IP} = lists:keyfind(ip, 1, Options),
-    {port, Port} = lists:keyfind(port, 1, Options),
-    Socket1 = create_zmq(Ctx, binary_to_list(IP), binary_to_list(Port)),
-    {Servers, Active  ++ [{{S, Options}, Socket1}]}.
