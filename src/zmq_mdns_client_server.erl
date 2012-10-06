@@ -15,6 +15,7 @@
 	 send/2,
 	 add_endpoint/3,
 	 remove_endpoint/3,
+	 server_down/2,
 	 servers/1]).
 
 %% gen_server callbacks
@@ -41,6 +42,10 @@ servers(Pid) ->
 
 send(Pid, Message) ->
     gen_server:call(Pid, {send, Message}).
+
+server_down(Pid, Spec) ->
+    gen_server:call(Pid, {down, Spec}).
+    
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -93,9 +98,38 @@ init([Service]) ->
 handle_call(servers, _From, #state{servers = {Servers, R}} = State) ->
     {reply, Servers++R, State};
 
-handle_call({send, Message}, _From, #state{servers = Servers} = State) ->
-    {Res, Servers1} = send_msg(Message, Servers),
-    {reply, Res, State#state{servers = Servers1}};
+handle_call({down, _Spec}, _From, #state{servers = {[], []}} = State) ->
+    {reply, {error, no_server}, State#state{servers = {[], []}}};
+
+handle_call({down, Spec}, _From, #state{servers = {[{Spec, _, _}], []}} = State) ->
+    {reply, {error, no_server}, State#state{servers = {[], []}}};
+
+handle_call({down, Spec}, _From, #state{servers = {[], [{Spec, _, _}]}} = State) ->
+    {reply, {error, no_server}, State#state{servers = {[], []}}};
+
+handle_call({down, Spec}, _From, #state{servers = {Servers, ServersR}} = State) ->
+    case {lists:keydelete(Spec, 1, Servers),
+	  lists:keydelete(Spec, 1, ServersR)} of
+	{[Spec1 | Servers1], ServersR1} ->
+	    {reply, {ok, Spec1}, 
+	     State#state{
+	       servers = {Servers1, [Spec1|ServersR1]}}};
+	{[], [Spec1 | ServersR1]} ->
+	    {reply, {ok, Spec1}, 
+	     State#state{
+	       servers = {ServersR1, [Spec1]}}}
+    end;
+
+handle_call({send, _Message}, _From, #state{servers = {[], []}} = State) ->
+    {reply, {error, no_server}, State};
+
+handle_call({send, Message}, From, #state{servers = {[Server|Servers], ServersR}} = State) ->
+    mdns_call_fsm:execute(Server, self(), Message, From),
+    {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
+
+handle_call({send, Message}, From, #state{servers = {[], [Server|ServersR]}} = State) ->
+    mdns_call_fsm:execute(Server, self(), Message, From),
+    {noreply, State#state{servers = {ServersR, [Server]}}};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -116,13 +150,14 @@ handle_call(_Request, _From, State) ->
 handle_cast({add, Server, Options}, 
 	    #state{servers = {Servers, ServersR},
 		   service = Service} = State) ->
-    case lists:keyfind({Server, Options}, 1, Servers) of
+    AllServers = Servers++ServersR,
+    case lists:keyfind({Server, Options}, 1, AllServers) of
 	false ->
 	    {ip, IP} = lists:keyfind(ip, 1, Options),
 	    {port, Port} = lists:keyfind(port, 1, Options),
 	    IPort = list_to_integer(binary_to_list(Port)),
 	    IPS = binary_to_list(IP),
-	    case Servers of
+	    case AllServers of
 		[] ->
 		    zmq_mdns_connection_event:notify_connect(Service);
 		_ ->
@@ -200,33 +235,3 @@ code_change(_OldVsn, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-send_msg(_, {[], []}) ->
-    {{error, no_servers}, {[], []}};
-
-send_msg(Msg, {[], Servers}) ->
-    send_msg(Msg, {Servers, []});
-
-send_msg(Msg, {[{_, IP, Port}=Server| Servers], ServersR}) ->
-    case gen_tcp:connect(IP, Port, [binary, {active,false}]) of
-	{ok, Socket} ->
-	    case gen_tcp:send(Socket, term_to_binary(Msg)) of
-		ok ->
-		    case gen_tcp:recv(Socket, 0) of
-			{ok, Res} ->
-			    gen_tcp:close(Socket),
-			    case binary_to_term(Res) of
-				noreply ->
-				    {noreply, {Servers, [Server | ServersR]}};
-				{reply, Reply} ->
-				    {{ok, Reply}, {Servers, [Server | ServersR]}}
-			    end;
-			_ ->
-			    send_msg(Msg, {Servers, ServersR})
-		    end;
-		_ ->
-		    send_msg(Msg, {Servers, ServersR})
-	    end;
-	_ ->
-	    send_msg(Msg, {Servers, ServersR})
-    end.
