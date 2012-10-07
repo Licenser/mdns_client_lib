@@ -68,6 +68,15 @@ instance(Service) ->
 servers(Pid) ->
     mdns_client_lib_server:servers(Pid).
 
+%%--------------------------------------------------------------------
+%% @private
+%% @doc
+%% Starts the application.
+%%
+%% @spec start() -> any()
+%% @end
+%%--------------------------------------------------------------------
+
 -spec start() -> any().
 start() ->
     application:start(mdns_client_lib).

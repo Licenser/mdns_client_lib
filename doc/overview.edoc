@@ -1,0 +1,12 @@
+@author Heinz N. Gies <heinz@licenser.net>
+@copyright 2012 Heinz N. Gies
+@version 0.1.0
+@title Welcome to the mdns_client_lib library!
+@doc `mdns_client_lib' is the server component of the mdns library.
+     This library does not connect on it's own, this is purpose since
+     it allows you to spin multiple instances for different services.
+     To start a new instance use {@link mdns_client_lib:instance/1}.
+     All calls of {@link mdns_client_lib:call/2} and
+     {@link mdns_client_lib:cast/2} are both being started as own 
+     processes meaning multiple calls can be run in paralell in a
+     non blocking manner.

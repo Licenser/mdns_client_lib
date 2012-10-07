@@ -2,3 +2,7 @@ erl_crash.dump
 *.beam
 deps
 ebin
+doc/*.html
+doc/*.png
+doc/*.css
+doc/edoc-info
