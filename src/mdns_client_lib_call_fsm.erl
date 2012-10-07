@@ -48,9 +48,12 @@
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
 %%
-%% @spec start_link() -> {ok, Pid} | ignore | {error, Error}
+%% @spec start_link(Server, Handler, Command, From) -> {ok, Pid} 
+%%                                                   | ignore 
+%%                                                   | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
+
 start_link(Server, Handler, Command, From) ->
     gen_fsm:start_link(?MODULE, [Server, Handler, Command, From], []).
 
@@ -65,19 +68,6 @@ cast(Server, Handler, Command) ->
 %%% gen_fsm callbacks
 %%%===================================================================
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm is started using gen_fsm:start/[3,4] or
-%% gen_fsm:start_link/[3,4], this function is called by the new
-%% process to initialize.
-%%
-%% @spec init(Args) -> {ok, StateName, State} |
-%%                     {ok, StateName, State, Timeout} |
-%%                     ignore |
-%%                     {stop, StopReason}
-%% @end
-%%--------------------------------------------------------------------
 init([undefined, Handler, Command, From]) ->
     {ok, new_server, #state{
 	   command = Command,
@@ -91,21 +81,6 @@ init([Server, Handler, Command, From]) ->
 	   handler = Handler,
 	   from = From}, 0}.
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% There should be one instance of this function for each possible
-%% state name. Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_event/2, the instance of this function with the same
-%% name as the current state name StateName is called to handle
-%% the event. It is also called if a timeout occurs.
-%%
-%% @spec state_name(Event, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
-%% @end
-%%--------------------------------------------------------------------
 connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
     case gen_tcp:connect(IP, Port, [binary, {active,false}]) of
 	{ok, Socket} ->
