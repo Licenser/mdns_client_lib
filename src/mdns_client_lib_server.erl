@@ -6,21 +6,26 @@
 %%% @end
 %%% Created : 19 Aug 2012 by Heinz Nikolaus Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(zmq_mdns_client_server).
+-module(mdns_client_lib_server).
 
 -behaviour(gen_server).
 
 %% API
 -export([start_link/1,
-	 send/2,
+	 call/2,
+	 cast/2,
 	 add_endpoint/3,
 	 remove_endpoint/3,
-	 server_down/2,
+	 get_server/1,
 	 servers/1]).
 
 %% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-	 terminate/2, code_change/3]).
+-export([init/1, 
+	 handle_call/3, 
+	 handle_cast/2, 
+	 handle_info/2,
+	 terminate/2, 
+	 code_change/3]).
 
 -record(state, {
 	  servers = {[], []},
@@ -40,11 +45,14 @@ remove_endpoint(Pid, Server, Options) ->
 servers(Pid) ->
     gen_server:call(Pid, servers).
 
-send(Pid, Message) ->
-    gen_server:call(Pid, {send, Message}).
+call(Pid, Message) ->
+    gen_server:call(Pid, {call, Message}).
 
-server_down(Pid, Spec) ->
-    gen_server:call(Pid, {down, Spec}).
+cast(Pid, Message) ->
+    gen_server:cast(Pid, {cast, Message}).
+
+get_server(Pid) ->
+    gen_server:call(Pid, get_server).
     
 
 %%--------------------------------------------------------------------
@@ -76,7 +84,7 @@ init([Service]) ->
     Type = "_" ++ Service ++ "._zeromq._tcp",
     mdns_client:add_type("_" ++ Service ++ "._zeromq._tcp"),
     ok = mdns_node_discovery_event:add_handler(
-	   zmq_mdns_client_mdns_handler,
+	   mdns_client_lib_mdns_handler,
 	   [list_to_binary(Type), self()]),
     {ok, #state{service = Service}}.
 
@@ -98,37 +106,26 @@ init([Service]) ->
 handle_call(servers, _From, #state{servers = {Servers, R}} = State) ->
     {reply, Servers++R, State};
 
-handle_call({down, _Spec}, _From, #state{servers = {[], []}} = State) ->
+handle_call(get_server, _From, #state{servers = {[], []}} = State) ->
     {reply, {error, no_server}, State#state{servers = {[], []}}};
 
-handle_call({down, Spec}, _From, #state{servers = {[{Spec, _, _}], []}} = State) ->
-    {reply, {error, no_server}, State#state{servers = {[], []}}};
+handle_call(get_server, _From, #state{servers = {[Spec | Servers1], ServersR1}} = State) ->
+    {reply, {ok, Spec}, 
+     State#state{servers = {Servers1, [Spec|ServersR1]}}};
 
-handle_call({down, Spec}, _From, #state{servers = {[], [{Spec, _, _}]}} = State) ->
-    {reply, {error, no_server}, State#state{servers = {[], []}}};
+handle_call(get_server, _From, #state{servers = {[], [Spec | ServersR1]}} = State) ->
+    {reply, {ok, Spec}, 
+     State#state{servers = {ServersR1, [Spec]}}};
 
-handle_call({down, Spec}, _From, #state{servers = {Servers, ServersR}} = State) ->
-    case {lists:keydelete(Spec, 1, Servers),
-	  lists:keydelete(Spec, 1, ServersR)} of
-	{[Spec1 | Servers1], ServersR1} ->
-	    {reply, {ok, Spec1}, 
-	     State#state{
-	       servers = {Servers1, [Spec1|ServersR1]}}};
-	{[], [Spec1 | ServersR1]} ->
-	    {reply, {ok, Spec1}, 
-	     State#state{
-	       servers = {ServersR1, [Spec1]}}}
-    end;
-
-handle_call({send, _Message}, _From, #state{servers = {[], []}} = State) ->
+handle_call({call, _Message}, _From, #state{servers = {[], []}} = State) ->
     {reply, {error, no_server}, State};
 
-handle_call({send, Message}, From, #state{servers = {[Server|Servers], ServersR}} = State) ->
-    mdns_call_fsm:execute(Server, self(), Message, From),
+handle_call({call, Message}, From, #state{servers = {[Server|Servers], ServersR}} = State) ->
+    mdns_client_lib_call_fsm:call(Server, self(), Message, From),
     {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
 
-handle_call({send, Message}, From, #state{servers = {[], [Server|ServersR]}} = State) ->
-    mdns_call_fsm:execute(Server, self(), Message, From),
+handle_call({call, Message}, From, #state{servers = {[], [Server|ServersR]}} = State) ->
+    mdns_client_lib_call_fsm:call(Server, self(), Message, From),
     {noreply, State#state{servers = {ServersR, [Server]}}};
 
 handle_call(_Request, _From, State) ->
@@ -159,7 +156,7 @@ handle_cast({add, Server, Options},
 	    IPS = binary_to_list(IP),
 	    case AllServers of
 		[] ->
-		    zmq_mdns_connection_event:notify_connect(Service);
+		    mdns_client_lib_connection_event:notify_connect(Service);
 		_ ->
 		    ok
 	    end,
@@ -168,6 +165,17 @@ handle_cast({add, Server, Options},
 	    {noreply, State}
     end;
 
+handle_cast({cast, Message}, #state{servers = {[], []}} = State) ->
+    mdns_client_lib_call_fsm:cast(undefined, self(), Message),
+    {noreply, State};
+
+handle_cast({cast, Message}, #state{servers = {[Server|Servers], ServersR}} = State) ->
+    mdns_client_lib_call_fsm:cast(Server, self(), Message),
+    {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
+
+handle_cast({cast, Message}, #state{servers = {[], [Server|ServersR]}} = State) ->
+    mdns_client_lib_call_fsm:cast(Server, self(), Message),
+    {noreply, State#state{servers = {ServersR, [Server]}}};
 
 handle_cast({remove, _Server, _Options},
 	    #state{servers = {[], []}} = State) -> 
@@ -176,13 +184,13 @@ handle_cast({remove, _Server, _Options},
 handle_cast({remove, Server, Options}, 
 	    #state{servers = {[{{Server, Options}, _, _}], []},
 		   service = Service} = State) ->
-    zmq_mdns_connection_event:notify_disconnect(Service),
+    mdns_client_lib_connection_event:notify_disconnect(Service),
     {noreply, State#state{servers = {[], []}}};
 
 handle_cast({remove, Server, Options}, 
 	    #state{servers = {[], [{{Server, Options}, _, _}]},
 		   service = Service} = State) ->
-    zmq_mdns_connection_event:notify_disconnect(Service),
+    mdns_client_lib_connection_event:notify_disconnect(Service),
     {noreply, State#state{servers = {[], []}}};
 
 handle_cast({remove, Server, Options}, 

@@ -12,3 +12,6 @@ test: compile
 
 docs:
 	@$(REBAR) doc
+
+xref: compile
+        @$(REBAR) xref skip_deps=true

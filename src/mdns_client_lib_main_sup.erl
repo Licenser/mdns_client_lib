@@ -1,5 +1,4 @@
-
--module(zmq_mdns_client_sup).
+-module(mdns_client_lib_main_sup).
 
 -behaviour(supervisor).
 
@@ -8,9 +7,6 @@
 
 %% Supervisor callbacks
 -export([init/1]).
-
-%% Helper macro for declaring children of supervisor
--define(CHILD(I, Type), {I, {I, start_link, []}, permanent, 5000, Type, [I]}).
 
 %% ===================================================================
 %% API functions
@@ -24,5 +20,12 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(zmq_mdns_client_server, worker)]}}.
+    {ok, {{one_for_one, 5, 10}, [{mdns_client_lib_sup, 
+				  {mdns_client_lib_sup, start_link, []}, 
+				  permanent, 5000, supervisor, [mdns_client_lib_sup]},
+				 {mdns_client_lib_connection_responder, 
+				  {gen_event, start_link, [{local, mdns_client_lib_connection_event}]},
+				  permanent, 5000, worker, []},
+				 {mdns_client_lib_call_fsm_sup, {mdns_client_lib_call_fsm_sup, start_link, []},
+				  permanent, 5000, supervisor, [mdns_client_lib_call_fsm_sup]}]}}.
 

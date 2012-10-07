@@ -6,7 +6,7 @@
 %%% @end
 %%% Created :  6 Oct 2012 by Heinz Nikolaus Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(mdns_call_fsm_sup).
+-module(mdns_client_lib_call_fsm_sup).
 
 -behaviour(supervisor).
 
@@ -53,7 +53,7 @@ start_link() ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(mdns_call_fsm, worker)]}}.
+    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(mdns_client_lib_call_fsm, worker)]}}.
 
 %%%===================================================================
 %%% Internal functions

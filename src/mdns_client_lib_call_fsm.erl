@@ -6,13 +6,14 @@
 %%% @end
 %%% Created :  6 Oct 2012 by Heinz Nikolaus Gies <heinz@licenser.net>
 %%%-------------------------------------------------------------------
--module(mdns_call_fsm).
+-module(mdns_client_lib_call_fsm).
 
 -behaviour(gen_fsm).
 
 %% API
 -export([
-	 execute/4,
+	 call/4,
+	 cast/3,
 	 start_link/4
 	]).
 
@@ -29,6 +30,7 @@
 	 sending/2,
 	 rcving/2,
 	 closing/2,
+	 returning_server/2,
 	 new_server/2
 	]).
 
@@ -52,8 +54,11 @@
 start_link(Server, Handler, Command, From) ->
     gen_fsm:start_link(?MODULE, [Server, Handler, Command, From], []).
 
-execute(Server, Handler, Command, From) ->
-    supervisor:start_child(mdns_call_fsm_sup, [Server, Handler, Command, From]).
+call(Server, Handler, Command, From) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From]).
+
+cast(Server, Handler, Command) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined]).
 
 
 %%%===================================================================
@@ -73,12 +78,18 @@ execute(Server, Handler, Command, From) ->
 %%                     {stop, StopReason}
 %% @end
 %%--------------------------------------------------------------------
+init([undefined, Handler, Command, From]) ->
+    {ok, new_server, #state{
+	   command = Command,
+	   handler = Handler,
+	   from = From}, 0};
+
 init([Server, Handler, Command, From]) ->
     {ok, connecting, #state{
 	   server = Server,
 	   command = Command,
 	   handler = Handler,
-	   from = From},0}.
+	   from = From}, 0}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -100,7 +111,7 @@ connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
 	{ok, Socket} ->
 	    {next_state, sending, State#state{socket = Socket}, 0};
 	_ ->
-	    {next_state, new_server, State}
+	    {next_state, new_server, State, 0}
     end.
 
 sending(_Event, #state{socket=Socket,
@@ -109,8 +120,17 @@ sending(_Event, #state{socket=Socket,
 	ok ->
 	    {next_state, rcving, State, 0};
 	_ ->
-	    {next_state, new_server, State}
+	    {next_state, new_server, State, 0}
     end.
+
+
+rcving(_Event, #state{socket=Socket, from=undefined} = State) ->
+    case gen_tcp:recv(Socket, 0) of
+	{ok, _Res} ->
+	    {next_state, closing, State, 0};
+	_ ->
+	    {next_state, new_server, State, 0}
+    end;
 
 rcving(_Event, #state{socket=Socket, from=From} = State) ->
     case gen_tcp:recv(Socket, 0) of
@@ -118,19 +138,36 @@ rcving(_Event, #state{socket=Socket, from=From} = State) ->
 	    gen_server:reply(From, binary_to_term(Res)),
 	    {next_state, closing, State, 0};
 	_ ->
-	    {next_state, new_server, State}
+	    {next_state, new_server, State, 0}
     end.
 
 closing(_Event, #state{socket=Socket} = State) ->
     gen_tcp:close(Socket),
     {stop, normal, State}.
 
+returning_server(_Event, #state{
+		   server={Spec, _, _},
+		   handler = Handler
+		  } = State) ->
+    mdns_client_lib_server:remove_endpoint(Handler, Spec),
+    {next_state, new_server, State, 0}.
+
 new_server(_Event, #state{
-	     server={Spec, _, _},
+	     handler = Handler, 
+	     from = undefined
+	    } = State) ->
+    case mdns_client_lib_server:get_server(Handler) of
+	{ok, Server} ->
+	    {next_state, connecting, State#state{server=Server}, 0} ;
+	_ ->
+	    {next_state, new_server, State, 1000}
+    end;
+
+new_server(_Event, #state{
 	     handler = Handler, 
 	     from = From
 	    } = State) ->
-    case zmq_mdns_client_server:server_down(Handler, Spec) of
+    case mdns_client_lib_server:get_server(Handler) of
 	{ok, Server} ->
 	    {next_state, connecting, State#state{server=Server}, 0} ;
 	_ ->

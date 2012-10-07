@@ -1,4 +1,4 @@
--module(zmq_mdns_client_mdns_handler).
+-module(mdns_client_lib_mdns_handler).
 
 -behaviour(gen_event).
 
@@ -25,11 +25,11 @@ terminate(Error, State) ->
 			       {state, State}]).
 
 handle_event({service_add, Type, Host, Options}, {Type, Pid}) ->
-    zmq_mdns_client_server:add_endpoint(Pid, Host, Options),
+    mdns_client_lib_server:add_endpoint(Pid, Host, Options),
     {ok, {Type, Pid}};
 
 handle_event({service_remove, Type, Host, Options}, {Type, Pid}) ->
-    zmq_mdns_client_server:remove_endpoint(Pid, Host, Options),
+    mdns_client_lib_server:remove_endpoint(Pid, Host, Options),
     {ok, {Type, Pid}};
 
 handle_event(_, State) ->

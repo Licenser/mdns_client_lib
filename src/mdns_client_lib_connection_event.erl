@@ -1,4 +1,4 @@
--module(zmq_mdns_connection_event).
+-module(mdns_client_lib_connection_event).
 
 -export([add_handler/1,
 	 add_handler/2,
