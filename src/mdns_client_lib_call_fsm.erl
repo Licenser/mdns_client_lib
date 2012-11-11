@@ -15,7 +15,7 @@
 	 call/4,
 	 cast/3,
 	 sure_cast/3,
-	 start_link/4
+	 start_link/5
 	]).
 
 %% gen_fsm callbacks
@@ -55,11 +55,11 @@
 %% @end
 %%--------------------------------------------------------------------
 
-start_link(Server, Handler, Command, From) ->
-    gen_fsm:start_link(?MODULE, [Server, Handler, Command, From], []).
+start_link(Server, Handler, Command, From, Type) ->
+    gen_fsm:start_link(?MODULE, [Server, Handler, Command, From, Type], []).
 
 call(Server, Handler, Command, From) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From, calls]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From, call]).
 
 sure_cast(Server, Handler, Command) ->
     supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, surecast]).
