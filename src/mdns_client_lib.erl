@@ -4,6 +4,7 @@
 	 instance/1,
 	 call/2,
 	 cast/2,
+	 sure_cast/2,
 	 servers/1
 	]).
 
@@ -26,9 +27,8 @@ call(Pid, Msg) ->
 %%--------------------------------------------------------------------
 %% @doc
 %% Sends a ansyncronous message to the server. This call is 
-%% assyncronous. Since it's not possible to know if there was a 
-%% successful send the library takes care of resending, order is 
-%% not guaranteed.
+%% assyncronous, all failures will be ignored, it's simple fire and
+%% forget.
 %%
 %% @spec cast(Pid::pid(), Msg::term()) -> ok
 %%
@@ -38,6 +38,22 @@ call(Pid, Msg) ->
 -spec cast(Pid::pid(), Msg::term()) -> ok.
 cast(Pid, Msg) ->
     mdns_client_lib_server:cast(Pid, Msg).
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Sends a ansyncronous message to the server. This call is 
+%% assyncronous. Since it's not possible to know if there was a 
+%% successful send the library takes care of resending, order is 
+%% not guaranteed.
+%%
+%% @spec cast(Pid::pid(), Msg::term()) -> ok
+%%
+%% @end
+
+-spec sure_cast(Pid::pid(), Msg::term()) -> ok.
+sure_cast(Pid, Msg) ->
+    mdns_client_lib_server:sure_cast(Pid, Msg).
+
 
 %%--------------------------------------------------------------------
 %% @doc

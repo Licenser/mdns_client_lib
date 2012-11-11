@@ -14,6 +14,7 @@
 -export([
 	 call/4,
 	 cast/3,
+	 sure_cast/3,
 	 start_link/4
 	]).
 
@@ -36,7 +37,7 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {server, handler, command, from, socket}).
+-record(state, {server, handler, command, from, socket, type}).
 
 %%%===================================================================
 %%% API
@@ -58,27 +59,32 @@ start_link(Server, Handler, Command, From) ->
     gen_fsm:start_link(?MODULE, [Server, Handler, Command, From], []).
 
 call(Server, Handler, Command, From) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From, calls]).
+
+sure_cast(Server, Handler, Command) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, surecast]).
 
 cast(Server, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, cast]).
 
 
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
 
-init([undefined, Handler, Command, From]) ->
+init([undefined, Handler, Command, From, Type]) ->
     {ok, new_server, #state{
 	   command = Command,
 	   handler = Handler,
+	   type = Type,
 	   from = From}, 0};
 
-init([Server, Handler, Command, From]) ->
+init([Server, Handler, Command, From, Type]) ->
     {ok, connecting, #state{
 	   server = Server,
 	   command = Command,
 	   handler = Handler,
+	   type = Type,
 	   from = From}, 0}.
 
 connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
@@ -86,7 +92,7 @@ connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
 	{ok, Socket} ->
 	    {next_state, sending, State#state{socket = Socket}, 0};
 	_ ->
-	    {next_state, new_server, State, 0}
+	    {next_state, returning_server, State, 0}
     end.
 
 sending(_Event, #state{socket=Socket,
@@ -95,7 +101,7 @@ sending(_Event, #state{socket=Socket,
 	ok ->
 	    {next_state, rcving, State, 0};
 	_ ->
-	    {next_state, new_server, State, 0}
+	    {next_state, returning_server, State, 0}
     end.
 
 
@@ -104,7 +110,7 @@ rcving(_Event, #state{socket=Socket, from=undefined} = State) ->
 	{ok, _Res} ->
 	    {next_state, closing, State, 0};
 	_ ->
-	    {next_state, new_server, State, 0}
+	    {next_state, returning_server, State, 0}
     end;
 
 rcving(_Event, #state{socket=Socket, from=From} = State) ->
@@ -113,7 +119,7 @@ rcving(_Event, #state{socket=Socket, from=From} = State) ->
 	    gen_server:reply(From, binary_to_term(Res)),
 	    {next_state, closing, State, 0};
 	_ ->
-	    {next_state, new_server, State, 0}
+	    {next_state, returning_server, State, 0}
     end.
 
 closing(_Event, #state{socket=Socket} = State) ->
@@ -129,7 +135,7 @@ returning_server(_Event, #state{
 
 new_server(_Event, #state{
 	     handler = Handler, 
-	     from = undefined
+	     type = sure_cast
 	    } = State) ->
     case mdns_client_lib_server:get_server(Handler) of
 	{ok, Server} ->
@@ -142,9 +148,11 @@ new_server(_Event, #state{
 	     handler = Handler, 
 	     from = From
 	    } = State) ->
-    case mdns_client_lib_server:get_server(Handler) of
-	{ok, Server} ->
+    case {From, mdns_client_lib_server:get_server(Handler)} of
+	{_, {ok, Server}} ->
 	    {next_state, connecting, State#state{server=Server}, 0} ;
+	{undefined, _} ->
+	    {stop, ok, State};
 	_ ->
 	    gen_server:reply(From, {error, no_servers}),
 	    {stop, ok, State}

@@ -14,6 +14,7 @@
 -export([start_link/1,
 	 call/2,
 	 cast/2,
+	 sure_cast/2,
 	 add_endpoint/3,
 	 remove_endpoint/3,
 	 get_server/1,
@@ -50,6 +51,10 @@ call(Pid, Message) ->
 
 cast(Pid, Message) ->
     gen_server:cast(Pid, {cast, Message}).
+
+
+sure_cast(Pid, Message) ->
+    gen_server:cast(Pid, {sure_cast, Message}).
 
 get_server(Pid) ->
     gen_server:call(Pid, get_server).
@@ -165,8 +170,8 @@ handle_cast({add, Server, Options},
 	    {noreply, State}
     end;
 
-handle_cast({cast, Message}, #state{servers = {[], []}} = State) ->
-    mdns_client_lib_call_fsm:cast(undefined, self(), Message),
+
+handle_cast({cast, _Message}, #state{servers = {[], []}} = State) ->
     {noreply, State};
 
 handle_cast({cast, Message}, #state{servers = {[Server|Servers], ServersR}} = State) ->
@@ -175,6 +180,18 @@ handle_cast({cast, Message}, #state{servers = {[Server|Servers], ServersR}} = St
 
 handle_cast({cast, Message}, #state{servers = {[], [Server|ServersR]}} = State) ->
     mdns_client_lib_call_fsm:cast(Server, self(), Message),
+    {noreply, State#state{servers = {ServersR, [Server]}}};
+
+handle_cast({sure_cast, Message}, #state{servers = {[], []}} = State) ->
+    mdns_client_lib_call_fsm:sure_cast(undefined, self(), Message),
+    {noreply, State};
+
+handle_cast({sure_cast, Message}, #state{servers = {[Server|Servers], ServersR}} = State) ->
+    mdns_client_lib_call_fsm:sure_cast(Server, self(), Message),
+    {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
+
+handle_cast({sure_cast, Message}, #state{servers = {[], [Server|ServersR]}} = State) ->
+    mdns_client_lib_call_fsm:sure_cast(Server, self(), Message),
     {noreply, State#state{servers = {ServersR, [Server]}}};
 
 handle_cast({remove, _Server, _Options},
