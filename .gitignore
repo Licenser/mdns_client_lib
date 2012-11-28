@@ -1,3 +1,4 @@
+.eunit
 erl_crash.dump
 *.beam
 deps

@@ -29,7 +29,7 @@ handle_event({service_add, Type, Host, Options}, {Type, Pid}) ->
     {ok, {Type, Pid}};
 
 handle_event({service_remove, Type, Host, Options}, {Type, Pid}) ->
-    mdns_client_lib_server:remove_endpoint(Pid, Host, Options),
+    mdns_client_lib_server:remove_endpoint(Pid, {Host, Options}),
     {ok, {Type, Pid}};
 
 handle_event(_, State) ->
@@ -40,6 +40,6 @@ handle_info({'EXIT', _, shutdown}, _) ->
 
 code_change(_, _, State) ->
     {ok, State}.
-		   
+
 handle_call(_, State) ->
     {ok, State}.

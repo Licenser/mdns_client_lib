@@ -21,9 +21,9 @@
 %% gen_fsm callbacks
 -export([init/1, 
 	 handle_event/3,
-	 handle_sync_event/4, 
-	 handle_info/3, 
-	 terminate/3, 
+	 handle_sync_event/4,
+	 handle_info/3,
+	 terminate/3,
 	 code_change/4]).
 
 -export([
@@ -49,8 +49,8 @@
 %% initialize. To ensure a synchronized start-up procedure, this
 %% function does not return until Module:init/1 has returned.
 %%
-%% @spec start_link(Server, Handler, Command, From) -> {ok, Pid} 
-%%                                                   | ignore 
+%% @spec start_link(Server, Handler, Command, From) -> {ok, Pid}
+%%                                                   | ignore
 %%                                                   | {error, Error}
 %% @end
 %%--------------------------------------------------------------------
@@ -134,7 +134,7 @@ returning_server(_Event, #state{
     {next_state, new_server, State, 0}.
 
 new_server(_Event, #state{
-	     handler = Handler, 
+	     handler = Handler,
 	     type = sure_cast
 	    } = State) ->
     case mdns_client_lib_server:get_server(Handler) of
@@ -145,7 +145,7 @@ new_server(_Event, #state{
     end;
 
 new_server(_Event, #state{
-	     handler = Handler, 
+	     handler = Handler,
 	     from = From
 	    } = State) ->
     case {From, mdns_client_lib_server:get_server(Handler)} of

@@ -16,16 +16,16 @@
 	 cast/2,
 	 sure_cast/2,
 	 add_endpoint/3,
-	 remove_endpoint/3,
+	 remove_endpoint/2,
 	 get_server/1,
 	 servers/1]).
 
 %% gen_server callbacks
--export([init/1, 
-	 handle_call/3, 
-	 handle_cast/2, 
+-export([init/1,
+	 handle_call/3,
+	 handle_cast/2,
 	 handle_info/2,
-	 terminate/2, 
+	 terminate/2,
 	 code_change/3]).
 
 -record(state, {
@@ -40,8 +40,8 @@
 add_endpoint(Pid, Server, Options) ->
     gen_server:cast(Pid, {add, Server, Options}).
 
-remove_endpoint(Pid, Server, Options) ->
-    gen_server:cast(Pid, {remove, Server, Options}).
+remove_endpoint(Pid, Server) ->
+    gen_server:cast(Pid, {remove, Server}).
 
 servers(Pid) ->
     gen_server:call(Pid, servers).
@@ -58,7 +58,7 @@ sure_cast(Pid, Message) ->
 
 get_server(Pid) ->
     gen_server:call(Pid, get_server).
-    
+
 
 %%--------------------------------------------------------------------
 %% @doc
@@ -115,11 +115,11 @@ handle_call(get_server, _From, #state{servers = {[], []}} = State) ->
     {reply, {error, no_server}, State#state{servers = {[], []}}};
 
 handle_call(get_server, _From, #state{servers = {[Spec | Servers1], ServersR1}} = State) ->
-    {reply, {ok, Spec}, 
+    {reply, {ok, Spec},
      State#state{servers = {Servers1, [Spec|ServersR1]}}};
 
 handle_call(get_server, _From, #state{servers = {[], [Spec | ServersR1]}} = State) ->
-    {reply, {ok, Spec}, 
+    {reply, {ok, Spec},
      State#state{servers = {ServersR1, [Spec]}}};
 
 handle_call({call, _Message}, _From, #state{servers = {[], []}} = State) ->
@@ -136,7 +136,7 @@ handle_call({call, Message}, From, #state{servers = {[], [Server|ServersR]}} = S
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
-    
+
 
 %%--------------------------------------------------------------------
 %% @private
@@ -149,7 +149,7 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_cast({add, Server, Options}, 
+handle_cast({add, Server, Options},
 	    #state{servers = {Servers, ServersR},
 		   service = Service} = State) ->
     AllServers = Servers++ServersR,
@@ -194,27 +194,27 @@ handle_cast({sure_cast, Message}, #state{servers = {[], [Server|ServersR]}} = St
     mdns_client_lib_call_fsm:sure_cast(Server, self(), Message),
     {noreply, State#state{servers = {ServersR, [Server]}}};
 
-handle_cast({remove, _Server, _Options},
-	    #state{servers = {[], []}} = State) -> 
+handle_cast({remove, _Server},
+	    #state{servers = {[], []}} = State) ->
     {noreply, State};
 
-handle_cast({remove, Server, Options}, 
-	    #state{servers = {[{{Server, Options}, _, _}], []},
+handle_cast({remove, Server},
+	    #state{servers = {[{Server, _, _}], []},
 		   service = Service} = State) ->
     mdns_client_lib_connection_event:notify_disconnect(Service),
     {noreply, State#state{servers = {[], []}}};
 
-handle_cast({remove, Server, Options}, 
-	    #state{servers = {[], [{{Server, Options}, _, _}]},
+handle_cast({remove, Server},
+	    #state{servers = {[], [{Server, _, _}]},
 		   service = Service} = State) ->
     mdns_client_lib_connection_event:notify_disconnect(Service),
     {noreply, State#state{servers = {[], []}}};
 
-handle_cast({remove, Server, Options}, 
+handle_cast({remove, Server},
 	    #state{servers = {Servers, ServersR}} = State) ->
     {noreply, State#state{
-		servers = {lists:keydelete({Server, Options}, 1, Servers), 
-			   lists:keydelete({Server, Options}, 1, ServersR)}}};
+		servers = {lists:keydelete(Server, 1, Servers),
+			   lists:keydelete(Server, 1, ServersR)}}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
