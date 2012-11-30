@@ -19,7 +19,7 @@
 	]).
 
 %% gen_fsm callbacks
--export([init/1, 
+-export([init/1,
 	 handle_event/3,
 	 handle_sync_event/4,
 	 handle_info/3,

@@ -41,5 +41,6 @@ handle_info({'EXIT', _, shutdown}, _) ->
 code_change(_, _, State) ->
     {ok, State}.
 
+
 handle_call(_, State) ->
-    {ok, State}.
+    {ok, ok, State}.

@@ -17,6 +17,7 @@
 	 sure_cast/2,
 	 add_endpoint/3,
 	 remove_endpoint/2,
+	 remove_endpoint/3,
 	 get_server/1,
 	 servers/1]).
 
@@ -33,28 +34,61 @@
 	  service
 	 }).
 
+-type mdns_server_name() :: string().
+-type mdns_server_options() :: [{Name::atom(), Value::binary()}].
+-type mdns_server() ::
+	{{Server::mdns_server_name(), Options::mdns_server_options()},
+	 IPS::inet:ip_address() | inet:hostname(),
+	 IPort::inet:port_number()}.
+
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec add_endpoint(pid(), mdns_server_name(), mdns_server_options()) -> ok.
+
 add_endpoint(Pid, Server, Options) ->
     gen_server:cast(Pid, {add, Server, Options}).
+
+-spec remove_endpoint(pid(), mdns_server_name(), mdns_server_options()) -> ok.
+
+remove_endpoint(Pid, Server, Options) ->
+    remove_endpoint(Pid, {Server, Options}).
+
+
+-spec remove_endpoint(pid(), {mdns_server_name(), mdns_server_options()}) -> ok.
 
 remove_endpoint(Pid, Server) ->
     gen_server:cast(Pid, {remove, Server}).
 
+-spec servers(pid()) -> [mdns_server()].
+
 servers(Pid) ->
     gen_server:call(Pid, servers).
 
+-spec call(pid(), Message::term()) ->
+		  pong |
+		  {error, no_servers} |
+		  {reply, Reply::term()} |
+		  noreply.
 call(Pid, Message) ->
     gen_server:call(Pid, {call, Message}).
+
+-spec cast(pid(), Message::term()) ->
+		  ok.
 
 cast(Pid, Message) ->
     gen_server:cast(Pid, {cast, Message}).
 
+-spec sure_cast(pid(), Message::term()) ->
+		       ok.
 
 sure_cast(Pid, Message) ->
     gen_server:cast(Pid, {sure_cast, Message}).
+
+-spec get_server(pid()) ->
+			{ok, mdns_server()} |
+			{error, no_servers}.
 
 get_server(Pid) ->
     gen_server:call(Pid, get_server).
@@ -169,7 +203,6 @@ handle_cast({add, Server, Options},
 	_ ->
 	    {noreply, State}
     end;
-
 
 handle_cast({cast, _Message}, #state{servers = {[], []}} = State) ->
     {noreply, State};
