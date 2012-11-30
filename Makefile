@@ -13,7 +13,7 @@ deps:
 clean:
 	$(REBAR) clean
 
-distclean: clean 
+distclean: clean
 	$(REBAR) delete-deps
 
 test:
