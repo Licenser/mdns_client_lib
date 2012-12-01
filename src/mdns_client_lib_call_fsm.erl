@@ -140,7 +140,7 @@ new_server(_Event, #state{
     case mdns_client_lib_server:get_server(Handler) of
 	{ok, Server} ->
 	    {next_state, connecting, State#state{server=Server}, 0} ;
-	_ ->
+	_ ->e
 	    {next_state, new_server, State, 1000}
     end;
 
@@ -152,10 +152,10 @@ new_server(_Event, #state{
 	{_, {ok, Server}} ->
 	    {next_state, connecting, State#state{server=Server}, 0} ;
 	{undefined, _} ->
-	    {stop, ok, State};
+	    {stop, normal, State};
 	_ ->
 	    gen_server:reply(From, {error, no_servers}),
-	    {stop, ok, State}
+	    {stop, normal, State}
     end.
 
 %%--------------------------------------------------------------------
