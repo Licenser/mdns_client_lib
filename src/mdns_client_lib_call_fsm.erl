@@ -88,7 +88,7 @@ init([Server, Handler, Command, From, Type]) ->
 	   from = From}, 0}.
 
 connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
-    case gen_tcp:connect(IP, Port, [binary, {active,false}]) of
+    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}]) of
 	{ok, Socket} ->
 	    {next_state, sending, State#state{socket = Socket}, 0};
 	_ ->
