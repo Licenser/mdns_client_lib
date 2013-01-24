@@ -12,34 +12,34 @@
 
 %% API
 -export([start_link/1,
-	 call/2,
-	 cast/2,
-	 sure_cast/2,
-	 add_endpoint/3,
-	 remove_endpoint/2,
-	 remove_endpoint/3,
-	 get_server/1,
-	 servers/1]).
+         call/2,
+         cast/2,
+         sure_cast/2,
+         add_endpoint/3,
+         remove_endpoint/2,
+         remove_endpoint/3,
+         get_server/1,
+         servers/1]).
 
 %% gen_server callbacks
 -export([init/1,
-	 handle_call/3,
-	 handle_cast/2,
-	 handle_info/2,
-	 terminate/2,
-	 code_change/3]).
+         handle_call/3,
+         handle_cast/2,
+         handle_info/2,
+         terminate/2,
+         code_change/3]).
 
 -record(state, {
-	  servers = {[], []},
-	  service
-	 }).
+          servers = {[], []},
+          service
+         }).
 
 -type mdns_server_name() :: string().
 -type mdns_server_options() :: [{Name::atom(), Value::binary()}].
 -type mdns_server() ::
-	{{Server::mdns_server_name(), Options::mdns_server_options()},
-	 IPS::inet:ip_address() | inet:hostname(),
-	 IPort::inet:port_number()}.
+        {{Server::mdns_server_name(), Options::mdns_server_options()},
+         IPS::inet:ip_address() | inet:hostname(),
+         IPort::inet:port_number()}.
 
 %%%===================================================================
 %%% API
@@ -67,28 +67,28 @@ servers(Pid) ->
     gen_server:call(Pid, servers).
 
 -spec call(pid(), Message::term()) ->
-		  pong |
-		  {error, no_servers} |
-		  {reply, Reply::term()} |
-		  noreply.
+                  pong |
+                  {error, no_servers} |
+                  {reply, Reply::term()} |
+                  noreply.
 call(Pid, Message) ->
     gen_server:call(Pid, {call, Message}).
 
 -spec cast(pid(), Message::term()) ->
-		  ok.
+                  ok.
 
 cast(Pid, Message) ->
     gen_server:cast(Pid, {cast, Message}).
 
 -spec sure_cast(pid(), Message::term()) ->
-		       ok.
+                       ok.
 
 sure_cast(Pid, Message) ->
     gen_server:cast(Pid, {sure_cast, Message}).
 
 -spec get_server(pid()) ->
-			{ok, mdns_server()} |
-			{error, no_servers}.
+                        {ok, mdns_server()} |
+                        {error, no_servers}.
 
 get_server(Pid) ->
     gen_server:call(Pid, get_server).
@@ -123,8 +123,8 @@ init([Service]) ->
     Type = "_" ++ Service ++ "._zeromq._tcp",
     mdns_client:add_type("_" ++ Service ++ "._zeromq._tcp"),
     ok = mdns_node_discovery_event:add_handler(
-	   mdns_client_lib_mdns_handler,
-	   [list_to_binary(Type), self()]),
+           mdns_client_lib_mdns_handler,
+           [list_to_binary(Type), self()]),
     {ok, #state{service = Service}}.
 
 %%--------------------------------------------------------------------
@@ -184,24 +184,24 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 handle_cast({add, Server, Options},
-	    #state{servers = {Servers, ServersR},
-		   service = Service} = State) ->
+            #state{servers = {Servers, ServersR},
+                   service = Service} = State) ->
     AllServers = Servers++ServersR,
     case lists:keyfind({Server, Options}, 1, AllServers) of
-	false ->
-	    {ip, IP} = lists:keyfind(ip, 1, Options),
-	    {port, Port} = lists:keyfind(port, 1, Options),
-	    IPort = list_to_integer(binary_to_list(Port)),
-	    IPS = binary_to_list(IP),
-	    case AllServers of
-		[] ->
-		    mdns_client_lib_connection_event:notify_connect(Service);
-		_ ->
-		    ok
-	    end,
-	    {noreply, State#state{servers={[{{Server, Options}, IPS, IPort} | Servers], ServersR}}};
-	_ ->
-	    {noreply, State}
+        false ->
+            {ip, IP} = lists:keyfind(ip, 1, Options),
+            {port, Port} = lists:keyfind(port, 1, Options),
+            IPort = list_to_integer(binary_to_list(Port)),
+            IPS = binary_to_list(IP),
+            case AllServers of
+                [] ->
+                    mdns_client_lib_connection_event:notify_connect(Service);
+                _ ->
+                    ok
+            end,
+            {noreply, State#state{servers={[{{Server, Options}, IPS, IPort} | Servers], ServersR}}};
+        _ ->
+            {noreply, State}
     end;
 
 handle_cast({cast, _Message}, #state{servers = {[], []}} = State) ->
@@ -228,26 +228,26 @@ handle_cast({sure_cast, Message}, #state{servers = {[], [Server|ServersR]}} = St
     {noreply, State#state{servers = {ServersR, [Server]}}};
 
 handle_cast({remove, _Server},
-	    #state{servers = {[], []}} = State) ->
+            #state{servers = {[], []}} = State) ->
     {noreply, State};
 
 handle_cast({remove, Server},
-	    #state{servers = {[{Server, _, _}], []},
-		   service = Service} = State) ->
+            #state{servers = {[{Server, _, _}], []},
+                   service = Service} = State) ->
     mdns_client_lib_connection_event:notify_disconnect(Service),
     {noreply, State#state{servers = {[], []}}};
 
 handle_cast({remove, Server},
-	    #state{servers = {[], [{Server, _, _}]},
-		   service = Service} = State) ->
+            #state{servers = {[], [{Server, _, _}]},
+                   service = Service} = State) ->
     mdns_client_lib_connection_event:notify_disconnect(Service),
     {noreply, State#state{servers = {[], []}}};
 
 handle_cast({remove, Server},
-	    #state{servers = {Servers, ServersR}} = State) ->
+            #state{servers = {Servers, ServersR}} = State) ->
     {noreply, State#state{
-		servers = {lists:keydelete(Server, 1, Servers),
-			   lists:keydelete(Server, 1, ServersR)}}};
+                servers = {lists:keydelete(Server, 1, Servers),
+                           lists:keydelete(Server, 1, ServersR)}}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.

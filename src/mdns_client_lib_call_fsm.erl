@@ -12,28 +12,28 @@
 
 %% API
 -export([
-	 call/4,
-	 cast/3,
-	 sure_cast/3,
-	 start_link/5
-	]).
+         call/4,
+         cast/3,
+         sure_cast/3,
+         start_link/5
+        ]).
 
 %% gen_fsm callbacks
 -export([init/1,
-	 handle_event/3,
-	 handle_sync_event/4,
-	 handle_info/3,
-	 terminate/3,
-	 code_change/4]).
+         handle_event/3,
+         handle_sync_event/4,
+         handle_info/3,
+         terminate/3,
+         code_change/4]).
 
 -export([
-	 connecting/2,
-	 sending/2,
-	 rcving/2,
-	 closing/2,
-	 returning_server/2,
-	 new_server/2
-	]).
+         connecting/2,
+         sending/2,
+         rcving/2,
+         closing/2,
+         returning_server/2,
+         new_server/2
+        ]).
 
 -define(SERVER, ?MODULE).
 
@@ -62,7 +62,7 @@ call(Server, Handler, Command, From) ->
     supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From, call]).
 
 sure_cast(Server, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, surecast]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, sure_cast]).
 
 cast(Server, Handler, Command) ->
     supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, cast]).
@@ -74,52 +74,52 @@ cast(Server, Handler, Command) ->
 
 init([undefined, Handler, Command, From, Type]) ->
     {ok, new_server, #state{
-	   command = Command,
-	   handler = Handler,
-	   type = Type,
-	   from = From}, 0};
+           command = Command,
+           handler = Handler,
+           type = Type,
+           from = From}, 0};
 
 init([Server, Handler, Command, From, Type]) ->
     {ok, connecting, #state{
-	   server = Server,
-	   command = Command,
-	   handler = Handler,
-	   type = Type,
-	   from = From}, 0}.
+           server = Server,
+           command = Command,
+           handler = Handler,
+           type = Type,
+           from = From}, 0}.
 
 connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
     case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}]) of
-	{ok, Socket} ->
-	    {next_state, sending, State#state{socket = Socket}, 0};
-	_ ->
-	    {next_state, returning_server, State, 0}
+        {ok, Socket} ->
+            {next_state, sending, State#state{socket = Socket}, 0};
+        _ ->
+            {next_state, returning_server, State, 0}
     end.
 
 sending(_Event, #state{socket=Socket,
-		       command = Command} = State) ->
+                       command = Command} = State) ->
     case gen_tcp:send(Socket, term_to_binary(Command)) of
-	ok ->
-	    {next_state, rcving, State, 0};
-	_ ->
-	    {next_state, returning_server, State, 0}
+        ok ->
+            {next_state, rcving, State, 0};
+        _ ->
+            {next_state, returning_server, State, 0}
     end.
 
 
 rcving(_Event, #state{socket=Socket, from=undefined} = State) ->
     case gen_tcp:recv(Socket, 0) of
-	{ok, _Res} ->
-	    {next_state, closing, State, 0};
-	_ ->
-	    {next_state, returning_server, State, 0}
+        {ok, _Res} ->
+            {next_state, closing, State, 0};
+        _ ->
+            {next_state, returning_server, State, 0}
     end;
 
 rcving(_Event, #state{socket=Socket, from=From} = State) ->
     case gen_tcp:recv(Socket, 0) of
-	{ok, Res} ->
-	    gen_server:reply(From, binary_to_term(Res)),
-	    {next_state, closing, State, 0};
-	_ ->
-	    {next_state, returning_server, State, 0}
+        {ok, Res} ->
+            gen_server:reply(From, binary_to_term(Res)),
+            {next_state, closing, State, 0};
+        _ ->
+            {next_state, returning_server, State, 0}
     end.
 
 closing(_Event, #state{socket=Socket} = State) ->
@@ -127,35 +127,40 @@ closing(_Event, #state{socket=Socket} = State) ->
     {stop, normal, State}.
 
 returning_server(_Event, #state{
-		   server={Spec, _, _},
-		   handler = Handler
-		  } = State) ->
+                   server={Spec, _, _},
+                   handler = Handler
+                  } = State) ->
     mdns_client_lib_server:remove_endpoint(Handler, Spec),
     {next_state, new_server, State, 0}.
 
 new_server(_Event, #state{
-	     handler = Handler,
-	     type = sure_cast
-	    } = State) ->
+             handler = Handler,
+             type = sure_cast
+            } = State) ->
     case mdns_client_lib_server:get_server(Handler) of
-	{ok, Server} ->
-	    {next_state, connecting, State#state{server=Server}, 0} ;
-	_ ->
-	    {next_state, new_server, State, 1000}
+        {ok, Server} ->
+            {next_state, connecting, State#state{server=Server}, 0} ;
+        _ ->
+            {next_state, new_server, State, 1000}
     end;
 
 new_server(_Event, #state{
-	     handler = Handler,
-	     from = From
-	    } = State) ->
+             type = cast
+            } = State) ->
+    {stop, normal, State};
+
+new_server(_Event, #state{
+             handler = Handler,
+             from = From
+            } = State) ->
     case {From, mdns_client_lib_server:get_server(Handler)} of
-	{_, {ok, Server}} ->
-	    {next_state, connecting, State#state{server=Server}, 0} ;
-	{undefined, _} ->
-	    {stop, normal, State};
-	_ ->
-	    gen_server:reply(From, {error, no_servers}),
-	    {stop, normal, State}
+        {_, {ok, Server}} ->
+            {next_state, connecting, State#state{server=Server}, 0} ;
+        {undefined, _} ->
+            {stop, normal, State};
+        _ ->
+            gen_server:reply(From, {error, no_servers}),
+            {stop, normal, State}
     end.
 
 %%--------------------------------------------------------------------
