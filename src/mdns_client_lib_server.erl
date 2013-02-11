@@ -120,8 +120,8 @@ start_link(Service) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Service]) ->
-    Type = "_" ++ Service ++ "._zeromq._tcp",
-    mdns_client:add_type("_" ++ Service ++ "._zeromq._tcp"),
+    Type = "_" ++ Service ++ "._tcp",
+    mdns_client:add_type("_" ++ Service ++ "._tcp"),
     ok = mdns_node_discovery_event:add_handler(
            mdns_client_lib_mdns_handler,
            [list_to_binary(Type), self()]),
