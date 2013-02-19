@@ -1,12 +1,12 @@
 -module(mdns_client_lib).
 
 -export([start/0,
-	 instance/1,
-	 call/2,
-	 cast/2,
-	 sure_cast/2,
-	 servers/1
-	]).
+         instance/1,
+         call/2,
+         cast/2,
+         sure_cast/2,
+         servers/1
+        ]).
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new instance of a mdns client library, this should
@@ -19,8 +19,8 @@
 %%--------------------------------------------------------------------
 
 -spec instance(Service::string()) -> {'error',_} |
-				     {'ok','undefined' | pid()} |
-				     {'ok','undefined' | pid(),_}.
+                                     {'ok','undefined' | pid()} |
+                                     {'ok','undefined' | pid(),_}.
 instance(Service) ->
     supervisor:start_child(mdns_client_lib_sup, [Service]).
 
@@ -38,10 +38,10 @@ instance(Service) ->
 
 
 -spec call(Pid::pid(), Msg::term()) ->
-		  noreply |
-		  pong |
-		  {error,no_servers} |
-		  {reply, Reply::term()}.
+                  noreply |
+                  pong |
+                  {error,no_servers} |
+                  {reply, Reply::term()}.
 call(Pid, Msg) ->
     mdns_client_lib_server:call(Pid, Msg).
 
