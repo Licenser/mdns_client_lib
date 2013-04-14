@@ -146,7 +146,7 @@ handle_call(servers, _From, #state{servers = {Servers, R}} = State) ->
     {reply, Servers++R, State};
 
 handle_call(get_server, _From, #state{servers = {[], []}} = State) ->
-    {reply, {error, no_server}, State#state{servers = {[], []}}};
+    {reply, {error, no_servers}, State#state{servers = {[], []}}};
 
 handle_call(get_server, _From, #state{servers = {[Spec | Servers1], ServersR1}} = State) ->
     {reply, {ok, Spec},
@@ -157,7 +157,7 @@ handle_call(get_server, _From, #state{servers = {[], [Spec | ServersR1]}} = Stat
      State#state{servers = {ServersR1, [Spec]}}};
 
 handle_call({call, _Message}, _From, #state{servers = {[], []}} = State) ->
-    {reply, {error, no_server}, State};
+    {reply, {error, no_servers}, State};
 
 handle_call({call, Message}, From, #state{servers = {[Server|Servers], ServersR}} = State) ->
     mdns_client_lib_call_fsm:call(Server, self(), Message, From),
