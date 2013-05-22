@@ -11,10 +11,14 @@
 
 start(_StartType, _StartArgs) ->
     {ok, Domain} = application:get_env(mdns_client_lib, domain),
-    MDNSConfig = [{port, 5353},
-		  {address, {224, 0, 0, 251}},
-		  {domain, Domain},
-		  {types, []}],
+    {ok, IFace} = application:get_env(mdns_client_lib, interface),
+    {ok, Port} = application:get_env(mdns_client_lib, port),
+    {ok, Addr} = application:get_env(mdns_client_lib, address),
+    MDNSConfig = [{port, Port},
+                  {address, Addr},
+                  {domain, Domain},
+                  {interface, IFace},
+                  {types, []}],
     {ok, _} =  mdns_client_supervisor:start_link([MDNSConfig]),
     mdns_client_lib_main_sup:start_link().
 
