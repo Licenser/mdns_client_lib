@@ -89,7 +89,8 @@ do(_Event, #state{service=Service, from=From, command = Command} = State) ->
             end,
             pooler:return_group_member(Service, Worker),
             {stop, normal, State};
-        _ ->
+        E ->
+            gen_server:reply(From, {error, E}),
             pooler:return_group_member(Service, Worker),
             {stop, normal, State}
     end.
