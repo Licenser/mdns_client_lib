@@ -180,7 +180,7 @@ handle_cast({add, Server, Options},
     {port, Port} = lists:keyfind(port, 1, Options),
     IPort = list_to_integer(binary_to_list(Port)),
     IPS = binary_to_list(IP),
-    Name = list_to_atom(IPS ++ ":" ++ integer_to_list(binary_to_list(Port))),
+    Name = list_to_atom(IPS ++ ":" ++ binary_to_list(Port)),
     case lists:keyfind({Server, Options}, 1, Servers) of
         false ->
             case Servers of
