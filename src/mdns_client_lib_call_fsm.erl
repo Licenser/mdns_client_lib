@@ -88,10 +88,11 @@ init([Server, Handler, Command, From, Type]) ->
            from = From}, 0}.
 
 connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
-    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 100) of
+    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250) of
         {ok, Socket} ->
             {next_state, sending, State#state{socket = Socket}, 0};
-        _ ->
+        E ->
+            lager:warning("[mdns_client_lib] Returning server after connect error: ~p", [E]),
             {next_state, returning_server, State, 0}
     end.
 
@@ -100,7 +101,8 @@ sending(_Event, #state{socket=Socket,
     case gen_tcp:send(Socket, term_to_binary(Command)) of
         ok ->
             {next_state, rcving, State, 0};
-        _ ->
+        E ->
+            lager:warning("[mdns_client_lib] Returning server after send error: ~p", [E]),
             {next_state, returning_server, State, 0}
     end.
 
@@ -109,7 +111,8 @@ rcving(_Event, #state{socket=Socket, from=undefined} = State) ->
     case gen_tcp:recv(Socket, 0) of
         {ok, _Res} ->
             {next_state, closing, State, 0};
-        _ ->
+        E ->
+            lager:warning("[mdns_client_lib] Returning server after recv error: ~p", [E]),
             {next_state, returning_server, State, 0}
     end;
 
@@ -118,7 +121,8 @@ rcving(_Event, #state{socket=Socket, from=From} = State) ->
         {ok, Res} ->
             gen_server:reply(From, binary_to_term(Res)),
             {next_state, closing, State, 0};
-        _ ->
+        E ->
+            lager:warning("[mdns_client_lib] Returning server after recv error: ~p", [E]),
             {next_state, returning_server, State, 0}
     end.
 
