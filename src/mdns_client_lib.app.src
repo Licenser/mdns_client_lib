@@ -5,6 +5,7 @@
   {registered, []},
   {applications, [
                   kernel,
+                  crypto,
                   stdlib
                  ]},
   {included_applications, [pooler]},

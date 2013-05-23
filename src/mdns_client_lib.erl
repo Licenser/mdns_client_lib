@@ -22,7 +22,7 @@
                                      {'ok','undefined' | pid()} |
                                      {'ok','undefined' | pid(),_}.
 instance(Service) ->
-    supervisor:start_child(mdns_client_lib_sup, [Service]).
+    supervisor:start_child(mdns_client_lib_instance_sup, [Service]).
 
 
 %%--------------------------------------------------------------------
