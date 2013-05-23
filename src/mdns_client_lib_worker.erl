@@ -14,22 +14,31 @@ init([Name, IP, Port, Master]) ->
     {ok, #state{name = Name, socket=Socket, master=Master, ip = IP, port = Port}}.
 
 handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Master, ip = IP, port = Port}=State) ->
-    R = case gen_tcp:send(Socket, term_to_binary(Command)) of
-            ok ->
-                case gen_tcp:recv(Socket, 0, 1500) of
-                    {error, _} = E ->
-                        lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
-                        mdns_client_lib_server:downvote_endpoint(Master, Name),
-                        E;
-                    Res ->
-                        Res
-                end;
-            E ->
-                lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
-                mdns_client_lib_server:downvote_endpoint(Master, Name),
-                {error, E}
-        end,
-    {reply, R, State};
+    case gen_tcp:send(Socket, term_to_binary(Command)) of
+        ok ->
+            case gen_tcp:recv(Socket, 0, 1500) of
+                {error, E} when E =:= enotconn orelse E =:= closed ->
+                    lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
+                    {ok, Socket1} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
+                    mdns_client_lib_server:downvote_endpoint(Master, Name),
+                    {reply, {error, E}, State#state{socket = Socket1}};
+                {error, _} = E ->
+                    lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
+                    mdns_client_lib_server:downvote_endpoint(Master, Name),
+                    {reply, E, State};
+                Res ->
+                    {reply, Res, State}
+            end;
+        {error, E} when E =:= enotconn orelse E =:= closed ->
+            lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
+            {ok, Socket1} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
+            mdns_client_lib_server:downvote_endpoint(Master, Name),
+            {reply, {error, E}, State#state{socket = Socket1}};
+        E ->
+            lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
+            mdns_client_lib_server:downvote_endpoint(Master, Name),
+            {reply, E, State}
+    end;
 
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
