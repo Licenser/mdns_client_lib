@@ -51,7 +51,7 @@
 %%--------------------------------------------------------------------
 
 start_link(Service, Handler, Command, From, Type) ->
-    gen_fsm:start_link(?MODULE, [Service, Handler, Command, From, Type], []).
+    gen_fsm:start_link(?MODULE, [list_to_atom(Service), Handler, Command, From, Type], []).
 
 call(Service, Handler, Command, From) ->
     supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, call]).
@@ -87,8 +87,10 @@ do(_Event, #state{service=Service, from=From, command = Command} = State) ->
                 _ ->
                     gen_server:reply(From, binary_to_term(Res))
             end,
+            pooler:return_group_member(Service, Worker),
             {stop, normal, State};
         _ ->
+            pooler:return_group_member(Service, Worker),
             {stop, normal, State}
     end.
 

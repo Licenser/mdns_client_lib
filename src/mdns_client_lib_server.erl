@@ -136,6 +136,9 @@ init([Service]) ->
 %% @end
 %%--------------------------------------------------------------------
 
+handle_call(service, _From, State = #state{service = Service}) ->
+    {reply, {ok, Service}, State};
+
 handle_call(servers, _From, #state{servers = Servers} = State) ->
     {reply, Servers, State};
 
@@ -252,7 +255,8 @@ handle_info(_Info, State) ->
 %% @spec terminate(Reason, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
+terminate(_Reason, #state{servers = Servers}) ->
+    [pooler:rm_pool(Name) || {_, Name,_} <- Servers],
     ok.
 
 %%--------------------------------------------------------------------

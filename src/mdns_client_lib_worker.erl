@@ -1,13 +1,13 @@
 -module(mdns_client_lib_worker).
 -behaviour(gen_server).
--export([start_link/1]).
+-export([start_link/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
 -record(state, {name, socket, master}).
 
-start_link(Args) ->
-    gen_server:start_link(?MODULE, Args, []).
+start_link(Name, IP, Port, Master) ->
+    gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
     {ok, Socket} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
@@ -16,10 +16,16 @@ init([Name, IP, Port, Master]) ->
 handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Master}=State) ->
     R = case gen_tcp:send(Socket, term_to_binary(Command)) of
             ok ->
-                gen_tcp:recv(Socket, 0);
-            E ->
+                case gen_tcp:recv(Socket, 1500) of
+                    {error, _} = E ->
+                        mdns_client_lib_server:downvote_endpoint(Master, Name),
+                        E;
+                    Res ->
+                        Res
+                end;
+            E1 ->
                 mdns_client_lib_server:downvote_endpoint(Master, Name),
-                {error, E}
+                {error, E1}
         end,
     {reply, R, State};
 
