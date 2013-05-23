@@ -19,9 +19,7 @@ handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Ma
             case gen_tcp:recv(Socket, 0, 1500) of
                 {error, E} when E =:= enotconn orelse E =:= closed ->
                     lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
-                    {ok, Socket1} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
-                    mdns_client_lib_server:downvote_endpoint(Master, Name),
-                    {reply, {error, E}, State#state{socket = Socket1}};
+                    {reply, {error, E}, reconnect(State)};
                 {error, _} = E ->
                     lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
                     mdns_client_lib_server:downvote_endpoint(Master, Name),
@@ -31,9 +29,7 @@ handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Ma
             end;
         {error, E} when E =:= enotconn orelse E =:= closed ->
             lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
-            {ok, Socket1} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
-            mdns_client_lib_server:downvote_endpoint(Master, Name),
-            {reply, {error, E}, State#state{socket = Socket1}};
+            {reply, {error, E}, reconnect(State)};
         E ->
             lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
             mdns_client_lib_server:downvote_endpoint(Master, Name),
@@ -55,3 +51,14 @@ terminate(_Reason, #state{socket=Socket}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+reconnect(State = #state{name = Name, master=Master, ip = IP, port = Port}) ->
+    mdns_client_lib_server:downvote_endpoint(Master, Name),
+    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250) of
+        {ok, Socket} ->
+            gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
+            State#state{socket = Socket};
+        _ ->
+            mdns_client_lib_server:downvote_endpoint(Master, Name),
+            State
+    end.
