@@ -23,5 +23,7 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(mdns_client_lib_server, worker)]}}.
+    PoolerSup = {pooler_sup, {pooler_sup, start_link, []},
+                 permanent, infinity, supervisor, [pooler_sup]},
+    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(mdns_client_lib_server, worker), PoolerSup]}}.
 

@@ -27,17 +27,12 @@
          code_change/4]).
 
 -export([
-         connecting/2,
-         sending/2,
-         rcving/2,
-         closing/2,
-         returning_server/2,
-         new_server/2
+         do/2
         ]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {server, handler, command, from, socket, type}).
+-record(state, {service, handler, command, from, socket, type}).
 
 %%%===================================================================
 %%% API
@@ -55,115 +50,45 @@
 %% @end
 %%--------------------------------------------------------------------
 
-start_link(Server, Handler, Command, From, Type) ->
-    gen_fsm:start_link(?MODULE, [Server, Handler, Command, From, Type], []).
+start_link(Service, Handler, Command, From, Type) ->
+    gen_fsm:start_link(?MODULE, [Service, Handler, Command, From, Type], []).
 
-call(Server, Handler, Command, From) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, From, call]).
+call(Service, Handler, Command, From) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, call]).
 
-sure_cast(Server, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, sure_cast]).
+sure_cast(Service, Handler, Command) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, sure_cast]).
 
-cast(Server, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Server, Handler, Command, undefined, cast]).
+cast(Service, Handler, Command) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, cast]).
 
 
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
 
-init([undefined, Handler, Command, From, Type]) ->
-    {ok, new_server, #state{
-           command = Command,
-           handler = Handler,
-           type = Type,
-           from = From}, 0};
 
-init([Server, Handler, Command, From, Type]) ->
-    {ok, connecting, #state{
-           server = Server,
-           command = Command,
-           handler = Handler,
-           type = Type,
-           from = From}, 0}.
+init([Service, Handler, Command, From, Type]) ->
+    {ok, do, #state{
+                service = Service,
+                command = Command,
+                handler = Handler,
+                type = Type,
+                from = From
+               }, 0}.
 
-connecting(_Event, #state{server={_Spec, IP, Port}} = State) ->
-    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250) of
-        {ok, Socket} ->
-            {next_state, sending, State#state{socket = Socket}, 0};
-        E ->
-            lager:warning("[mdns_client_lib] Returning server after connect error: ~p", [E]),
-            {next_state, returning_server, State, 0}
-    end.
-
-sending(_Event, #state{socket=Socket,
-                       command = Command} = State) ->
-    case gen_tcp:send(Socket, term_to_binary(Command)) of
-        ok ->
-            {next_state, rcving, State, 0};
-        E ->
-            lager:warning("[mdns_client_lib] Returning server after send error: ~p", [E]),
-            {next_state, returning_server, State, 0}
-    end.
-
-
-rcving(_Event, #state{socket=Socket, from=undefined} = State) ->
-    case gen_tcp:recv(Socket, 0) of
-        {ok, _Res} ->
-            {next_state, closing, State, 0};
-        E ->
-            lager:warning("[mdns_client_lib] Returning server after recv error: ~p", [E]),
-            {next_state, returning_server, State, 0}
-    end;
-
-rcving(_Event, #state{socket=Socket, from=From} = State) ->
-    case gen_tcp:recv(Socket, 0) of
+do(_Event, #state{service=Service, from=From, command = Command} = State) ->
+    Worker = pooler:take_group_member(Service),
+    case gen_server:call(Worker, {call, Command}) of
         {ok, Res} ->
-            gen_server:reply(From, binary_to_term(Res)),
-            {next_state, closing, State, 0};
-        E ->
-            lager:warning("[mdns_client_lib] Returning server after recv error: ~p", [E]),
-            {next_state, returning_server, State, 0}
-    end.
-
-closing(_Event, #state{socket=Socket} = State) ->
-    gen_tcp:close(Socket),
-    {stop, normal, State}.
-
-returning_server(_Event, #state{
-                   server={Spec, _, _},
-                   handler = Handler
-                  } = State) ->
-    mdns_client_lib_server:remove_endpoint(Handler, Spec),
-    {next_state, new_server, State, 0}.
-
-new_server(_Event, #state{
-             handler = Handler,
-             type = sure_cast
-            } = State) ->
-    case mdns_client_lib_server:get_server(Handler) of
-        {ok, Server} ->
-            {next_state, connecting, State#state{server=Server}, 0} ;
-        _ ->
-            {next_state, new_server, State, 1000}
-    end;
-
-new_server(_Event, #state{
-             type = cast
-            } = State) ->
-    {stop, normal, State};
-
-new_server(_Event, #state{
-             handler = Handler,
-             from = From
-            } = State) ->
-    case {From, mdns_client_lib_server:get_server(Handler)} of
-        {_, {ok, Server}} ->
-            {next_state, connecting, State#state{server=Server}, 0} ;
-        {undefined, _} ->
+            case From of
+                undefined ->
+                    ok;
+                _ ->
+                    gen_server:reply(From, binary_to_term(Res))
+            end,
             {stop, normal, State};
         _ ->
-            gen_server:reply(From, {error, no_servers}),
             {stop, normal, State}
     end.
 

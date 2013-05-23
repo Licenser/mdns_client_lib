@@ -16,8 +16,7 @@
          cast/2,
          sure_cast/2,
          add_endpoint/3,
-         remove_endpoint/2,
-         remove_endpoint/3,
+         downvote_endpoint/2,
          get_server/1,
          servers/1]).
 
@@ -30,7 +29,7 @@
          code_change/3]).
 
 -record(state, {
-          servers = {[], []},
+          servers = [],
           service
          }).
 
@@ -50,16 +49,11 @@
 add_endpoint(Pid, Server, Options) ->
     gen_server:cast(Pid, {add, Server, Options}).
 
--spec remove_endpoint(pid(), mdns_server_name(), mdns_server_options()) -> ok.
 
-remove_endpoint(Pid, Server, Options) ->
-    remove_endpoint(Pid, {Server, Options}).
+-spec downvote_endpoint(pid(), {mdns_server_name(), mdns_server_options()}) -> ok.
 
-
--spec remove_endpoint(pid(), {mdns_server_name(), mdns_server_options()}) -> ok.
-
-remove_endpoint(Pid, Server) ->
-    gen_server:cast(Pid, {remove, Server}).
+downvote_endpoint(Pid, Name) ->
+    gen_server:cast(Pid, {downvote, Name}).
 
 -spec servers(pid()) -> [mdns_server()].
 
@@ -142,30 +136,15 @@ init([Service]) ->
 %% @end
 %%--------------------------------------------------------------------
 
-handle_call(servers, _From, #state{servers = {Servers, R}} = State) ->
-    {reply, Servers++R, State};
+handle_call(servers, _From, #state{servers = Servers} = State) ->
+    {reply, Servers, State};
 
-handle_call(get_server, _From, #state{servers = {[], []}} = State) ->
-    {reply, {error, no_servers}, State#state{servers = {[], []}}};
-
-handle_call(get_server, _From, #state{servers = {[Spec | Servers1], ServersR1}} = State) ->
-    {reply, {ok, Spec},
-     State#state{servers = {Servers1, [Spec|ServersR1]}}};
-
-handle_call(get_server, _From, #state{servers = {[], [Spec | ServersR1]}} = State) ->
-    {reply, {ok, Spec},
-     State#state{servers = {ServersR1, [Spec]}}};
-
-handle_call({call, _Message}, _From, #state{servers = {[], []}} = State) ->
+handle_call({call, _Message}, _From, #state{servers = []} = State) ->
     {reply, {error, no_servers}, State};
 
-handle_call({call, Message}, From, #state{servers = {[Server|Servers], ServersR}} = State) ->
-    mdns_client_lib_call_fsm:call(Server, self(), Message, From),
-    {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
-
-handle_call({call, Message}, From, #state{servers = {[], [Server|ServersR]}} = State) ->
-    mdns_client_lib_call_fsm:call(Server, self(), Message, From),
-    {noreply, State#state{servers = {ServersR, [Server]}}};
+handle_call({call, Message}, From, State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:call(Service, self(), Message, From),
+    {noreply, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
@@ -183,71 +162,68 @@ handle_call(_Request, _From, State) ->
 %% @end
 %%--------------------------------------------------------------------
 
+
+addpool(Service, Name, IP, Port) ->
+    PoolConfig = [{name, Name},
+                  {group, list_to_atom(Service)},
+                  {max_count, 5},
+                  {init_count, 2},
+                  {start_mfa,
+                   {mdns_client_lib_worker,
+                    start_link, [Name, IP, Port, self()]}}],
+    pooler:new_pool(PoolConfig).
+
 handle_cast({add, Server, Options},
-            #state{servers = {Servers, ServersR},
+            #state{servers = Servers,
                    service = Service} = State) ->
-    AllServers = Servers++ServersR,
-    case lists:keyfind({Server, Options}, 1, AllServers) of
+    {ip, IP} = lists:keyfind(ip, 1, Options),
+    {port, Port} = lists:keyfind(port, 1, Options),
+    IPort = list_to_integer(binary_to_list(Port)),
+    IPS = binary_to_list(IP),
+    Name = list_to_atom(IPS ++ ":" ++ integer_to_list(binary_to_list(Port))),
+    case lists:keyfind({Server, Options}, 1, Servers) of
         false ->
-            {ip, IP} = lists:keyfind(ip, 1, Options),
-            {port, Port} = lists:keyfind(port, 1, Options),
-            IPort = list_to_integer(binary_to_list(Port)),
-            IPS = binary_to_list(IP),
-            case AllServers of
+            case Servers of
                 [] ->
                     mdns_client_lib_connection_event:notify_connect(Service);
                 _ ->
                     ok
             end,
-            {noreply, State#state{servers={[{{Server, Options}, IPS, IPort} | Servers], ServersR}}};
+            addpool(Service, Name, IPS, IPort),
+            {noreply, State#state{servers=[{{Server, Options}, Name, 0} | Servers]}};
         _ ->
-            {noreply, State}
+            S1 = [case S of
+                      {Opts, N, _} when N =:= Name ->
+                          {Opts, N, 0};
+                      _ ->
+                          S
+                  end || S <- Servers],
+            {noreply, State#state{servers=S1}}
     end;
 
-handle_cast({cast, _Message}, #state{servers = {[], []}} = State) ->
+handle_cast({cast, _Message}, #state{servers = []} = State) ->
     {noreply, State};
 
-handle_cast({cast, Message}, #state{servers = {[Server|Servers], ServersR}} = State) ->
-    mdns_client_lib_call_fsm:cast(Server, self(), Message),
-    {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
-
-handle_cast({cast, Message}, #state{servers = {[], [Server|ServersR]}} = State) ->
-    mdns_client_lib_call_fsm:cast(Server, self(), Message),
-    {noreply, State#state{servers = {ServersR, [Server]}}};
-
-handle_cast({sure_cast, Message}, #state{servers = {[], []}} = State) ->
-    mdns_client_lib_call_fsm:sure_cast(undefined, self(), Message),
+handle_cast({cast, Message}, #state{service = Service} = State) ->
+    mdns_client_lib_call_fsm:cast(Service, self(), Message),
     {noreply, State};
 
-handle_cast({sure_cast, Message}, #state{servers = {[Server|Servers], ServersR}} = State) ->
-    mdns_client_lib_call_fsm:sure_cast(Server, self(), Message),
-    {noreply, State#state{servers = {Servers, [Server|ServersR]}}};
-
-handle_cast({sure_cast, Message}, #state{servers = {[], [Server|ServersR]}} = State) ->
-    mdns_client_lib_call_fsm:sure_cast(Server, self(), Message),
-    {noreply, State#state{servers = {ServersR, [Server]}}};
-
-handle_cast({remove, _Server},
-            #state{servers = {[], []}} = State) ->
+handle_cast({sure_cast, Message}, #state{service = Service} = State) ->
+    mdns_client_lib_call_fsm:sure_cast(Service, self(), Message),
     {noreply, State};
 
-handle_cast({remove, Server},
-            #state{servers = {[{Server, _, _}], []},
-                   service = Service} = State) ->
-    mdns_client_lib_connection_event:notify_disconnect(Service),
-    {noreply, State#state{servers = {[], []}}};
-
-handle_cast({remove, Server},
-            #state{servers = {[], [{Server, _, _}]},
-                   service = Service} = State) ->
-    mdns_client_lib_connection_event:notify_disconnect(Service),
-    {noreply, State#state{servers = {[], []}}};
-
-handle_cast({remove, Server},
-            #state{servers = {Servers, ServersR}} = State) ->
-    {noreply, State#state{
-                servers = {lists:keydelete(Server, 1, Servers),
-                           lists:keydelete(Server, 1, ServersR)}}};
+handle_cast({downvote, BadName}, #state{servers = Servers} = State) ->
+    S1 = [case S of
+              {Opts, Name, Cnt} when Name =:= BadName ->
+                  {Opts, Name, Cnt - 1};
+              {Opts, Name, -9} when Name =:= BadName ->
+                  pooler:rm_pool(BadName),
+                  {Opts, Name, -10};
+              Srv ->
+                  Srv
+          end || S <- Servers],
+    S2 = [{Opts, Name, Cnt} || {Opts, Name, Cnt} <- S1, Cnt >-10],
+    {noreply, State#state{servers = S2}};
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
