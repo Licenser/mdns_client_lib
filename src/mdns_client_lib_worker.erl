@@ -16,7 +16,7 @@ init([Name, IP, Port, Master]) ->
 handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Master, ip = IP, port = Port}=State) ->
     R = case gen_tcp:send(Socket, term_to_binary(Command)) of
             ok ->
-                case gen_tcp:recv(Socket, 1500) of
+                case gen_tcp:recv(Socket, 0, 1500) of
                     {error, _} = E ->
                         lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
                         mdns_client_lib_server:downvote_endpoint(Master, Name),
