@@ -4,28 +4,30 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--record(state, {name, socket, master}).
+-record(state, {name, socket, master, ip, port}).
 
 start_link(Name, IP, Port, Master) ->
     gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
     {ok, Socket} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
-    {ok, #state{name = Name, socket=Socket, master=Master}}.
+    {ok, #state{name = Name, socket=Socket, master=Master, ip = IP, port = Port}}.
 
-handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Master}=State) ->
+handle_call({call, Command}, _From, #state{name = Name, socket=Socket, master=Master, ip = IP, port = Port}=State) ->
     R = case gen_tcp:send(Socket, term_to_binary(Command)) of
             ok ->
                 case gen_tcp:recv(Socket, 1500) of
                     {error, _} = E ->
+                        lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
                         mdns_client_lib_server:downvote_endpoint(Master, Name),
                         E;
                     Res ->
                         Res
                 end;
-            E1 ->
+            E ->
+                lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
                 mdns_client_lib_server:downvote_endpoint(Master, Name),
-                {error, E1}
+                {error, E}
         end,
     {reply, R, State};
 
