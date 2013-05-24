@@ -31,8 +31,9 @@
         ]).
 
 -define(SERVER, ?MODULE).
-
--record(state, {service, handler, command, from, socket, type}).
+-define(RETRY_DELAY, 150).
+-define(RETRIES, 10).
+-record(state, {service, handler, command, from, socket, type, retry = 0}).
 
 %%%===================================================================
 %%% API
@@ -69,6 +70,7 @@ cast(Service, Handler, Command) ->
 
 
 init([Service, Handler, Command, From, Type]) ->
+    random:seed(now()),
     {ok, do, #state{
                 service = Service,
                 command = Command,
@@ -77,22 +79,34 @@ init([Service, Handler, Command, From, Type]) ->
                 from = From
                }, 0}.
 
-do(_Event, #state{service=Service, from=From, command = Command} = State) ->
-    Worker = pooler:take_group_member(Service),
-    case gen_server:call(Worker, {call, Command}) of
-        {ok, Res} ->
-            case From of
-                undefined ->
-                    ok;
-                _ ->
-                    gen_server:reply(From, binary_to_term(Res))
-            end,
-            pooler:return_group_member(Service, Worker),
-            {stop, normal, State};
-        E ->
-            gen_server:reply(From, {error, E}),
-            pooler:return_group_member(Service, Worker),
-            {stop, normal, State}
+do(_Event, #state{retry=?RETRIES, from=From} = State) ->
+    gen_server:reply(From, {error, busy}),
+    {stop, normal, State};
+
+do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = State) ->
+    case pooler:take_group_member(Service) of
+        error_no_members ->
+            {ok, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+        Worker ->
+            case gen_server:call(Worker, {call, Command}) of
+                {ok, Res} ->
+                    case From of
+                        undefined ->
+                            ok;
+                        _ ->
+                            gen_server:reply(From, binary_to_term(Res))
+                    end,
+                    pooler:return_group_member(Service, Worker),
+                    {stop, normal, State};
+                {error, enotconn} ->
+                    {ok, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+                {error, closed} ->
+                    {ok, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+                E ->
+                    gen_server:reply(From, {error, E}),
+                    pooler:return_group_member(Service, Worker),
+                    {stop, normal, State}
+            end
     end.
 
 %%--------------------------------------------------------------------
