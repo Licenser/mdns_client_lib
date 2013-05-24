@@ -86,7 +86,7 @@ do(_Event, #state{retry=?RETRIES, from=From} = State) ->
 do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = State) ->
     case pooler:take_group_member(Service) of
         error_no_members ->
-            {ok, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+            {ok, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
         Worker ->
             case gen_server:call(Worker, {call, Command}) of
                 {ok, Res} ->
