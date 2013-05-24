@@ -68,8 +68,8 @@ cast(Service, Handler, Command) ->
 %%% gen_fsm callbacks
 %%%===================================================================
 
-
 init([Service, Handler, Command, From, Type]) ->
+    process_flag(trap_exit, true),
     random:seed(now()),
     {ok, do, #state{
                 service = Service,
@@ -174,7 +174,12 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(_Reason, _StateName, _State) ->
+terminate(normal, _StateName, _State) ->
+    ok;
+terminate(_Reason, _StateName, _State = #state{from = undefined}) ->
+    ok;
+terminate(Reason, _StateName, _State = #state{from = From}) ->
+    gen_server:reply(From, {error, Reason}),
     ok.
 
 %%--------------------------------------------------------------------

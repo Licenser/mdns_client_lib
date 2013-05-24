@@ -10,6 +10,7 @@ start_link(Name, IP, Port, Master) ->
     gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
+    process_flag(trap_exit, true),
     Timeout = case application:get_env(recv_timeout) of
                   {ok, T} ->
                       T;
@@ -53,7 +54,7 @@ handle_info(_Info, State) ->
     {noreply, State}.
 
 terminate(_Reason, #state{socket=Socket}) ->
-    ok = gen_tcp:close(Socket),
+    gen_tcp:close(Socket),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
