@@ -17,6 +17,8 @@
          sure_cast/2,
          add_endpoint/3,
          downvote_endpoint/2,
+         downvote_endpoint/3,
+         remove_endpoint/2,
          get_server/1,
          servers/1]).
 
@@ -50,10 +52,19 @@ add_endpoint(Pid, Server, Options) ->
     gen_server:cast(Pid, {add, Server, Options}).
 
 
--spec downvote_endpoint(pid(), {mdns_server_name(), mdns_server_options()}) -> ok.
+-spec remove_endpoint(pid(), {mdns_server_name(), mdns_server_options()}) -> ok.
+remove_endpoint(Pid, ID) ->
+    gen_server:cast(Pid, {remove, ID}).
+
+-spec downvote_endpoint(pid(), atom(), pos_integer()) -> ok.
+
+downvote_endpoint(Pid, Name, Ammount) when Ammount >= 1->
+    gen_server:cast(Pid, {downvote, Name, Ammount}).
+
+-spec downvote_endpoint(pid(), atom()) -> ok.
 
 downvote_endpoint(Pid, Name) ->
-    gen_server:cast(Pid, {downvote, Name}).
+    downvote_endpoint(Pid, Name, 1).
 
 -spec servers(pid()) -> [mdns_server()].
 
@@ -223,17 +234,23 @@ handle_cast({sure_cast, Message}, #state{service = Service} = State) ->
     mdns_client_lib_call_fsm:sure_cast(Service, self(), Message),
     {noreply, State};
 
-handle_cast({downvote, BadName}, #state{servers = Servers} = State) ->
+handle_cast({downvote, BadName, Amount}, #state{servers = Servers} = State) ->
     S1 = [case S of
-              {Opts, Name, Cnt} when Name =:= BadName ->
-                  {Opts, Name, Cnt - 1};
-              {Opts, Name, -9} when Name =:= BadName ->
+              {Opts, Name, Cnt} when
+                    Name =:= BadName,
+                    (Cnt - Amount) =< -10 ->
                   pooler:rm_pool(BadName),
                   {Opts, Name, -10};
+              {Opts, Name, Cnt} when Name =:= BadName ->
+                  {Opts, Name, Cnt - Amount};
               Srv ->
                   Srv
           end || S <- Servers],
-    S2 = [{Opts, Name, Cnt} || {Opts, Name, Cnt} <- S1, Cnt >-10],
+    S2 = [S || S = {_, _, Cnt} <- S1, Cnt > -10],
+    {noreply, State#state{servers = S2}};
+
+handle_cast({remove, BadID}, #state{servers = Servers} = State) ->
+    S2 = [S || S = {ID,_ ,_} <- Servers, ID =:= BadID],
     {noreply, State#state{servers = S2}};
 
 handle_cast(_Msg, State) ->
