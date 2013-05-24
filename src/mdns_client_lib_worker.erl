@@ -17,7 +17,7 @@ init([Name, IP, Port, Master]) ->
                   _ ->
                       1500
               end,
-    {ok, Socket} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
+    {ok, Socket} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], Timeout),
     {ok, #state{name=Name, socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}}.
 
 handle_call({call, Command}, _From,
