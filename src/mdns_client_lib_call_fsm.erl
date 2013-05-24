@@ -86,7 +86,7 @@ do(_Event, #state{retry=?RETRIES, from=From} = State) ->
 do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = State) ->
     case pooler:take_group_member(Service) of
         error_no_members ->
-            {ok, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+            {next_state, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
         Worker ->
             case gen_server:call(Worker, {call, Command}) of
                 {ok, Res} ->
@@ -99,9 +99,9 @@ do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = 
                     pooler:return_group_member(Service, Worker),
                     {stop, normal, State};
                 {error, enotconn} ->
-                    {ok, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+                    {next_state, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
                 {error, closed} ->
-                    {ok, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+                    {next_state, do, State=#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
                 E ->
                     gen_server:reply(From, {error, E}),
                     pooler:return_group_member(Service, Worker),
