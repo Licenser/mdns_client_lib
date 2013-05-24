@@ -85,10 +85,12 @@ do(_Event, #state{retry=?RETRIES, from=From} = State) ->
 
 do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = State) ->
     case pooler:take_group_member(Service) of
-        {error_no_group, _G} ->
-            {next_state, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+        {error_no_group, G} ->
+            lager:warning("[MDNS Cleint] Group ~p for service ~p does not exist.", [G, Service]),
+            {next_state, do, State#state{retry = Retry + 1}, random:uniform(?RETRY_DELAY)};
         error_no_members ->
-            {next_state, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+            lager:warning("[MDNS Cleint] Service ~p has no free members.", [Service]),
+            {next_state, do, State#state{retry = Retry + 1}, random:uniform(?RETRY_DELAY)};
         Worker ->
             case gen_server:call(Worker, {call, Command}) of
                 {ok, Res} ->
@@ -100,12 +102,10 @@ do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = 
                     end,
                     pooler:return_group_member(Service, Worker),
                     {stop, normal, State};
-                {error, enotconn} ->
+                {error, E} when E =:= enotconn orelse
+                                E =:= closed ->
                     pooler:return_group_member(Service, Worker),
-                    {next_state, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
-                {error, closed} ->
-                    pooler:return_group_member(Service, Worker),
-                    {next_state, do, State#state{service = Retry + 1}, random:uniform(?RETRY_DELAY)};
+                    {next_state, do, State#state{retry = Retry + 1}, random:uniform(?RETRY_DELAY)};
                 E ->
                     gen_server:reply(From, {error, E}),
                     pooler:return_group_member(Service, Worker),
