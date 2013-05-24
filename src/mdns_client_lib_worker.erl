@@ -10,7 +10,12 @@ start_link(Name, IP, Port, Master) ->
     gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
-    Timeout = application:get_env(mdns_client_lib, recv_timeout, 1500),
+    Timeout = case application:get_env(mdns_client_lib, recv_timeout) of
+                  {ok, T} ->
+                      T;
+                  _ ->
+                      1500
+              end,
     {ok, Socket} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250),
     {ok, #state{name=Name, socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}}.
 
