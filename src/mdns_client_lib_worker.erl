@@ -10,7 +10,7 @@ start_link(Name, IP, Port, Master) ->
     gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
-    Timeout = case application:get_env(mdns_client_lib, recv_timeout) of
+    Timeout = case application:get_env(recv_timeout) of
                   {ok, T} ->
                       T;
                   _ ->

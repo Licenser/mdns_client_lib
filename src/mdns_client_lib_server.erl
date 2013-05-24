@@ -166,11 +166,19 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 
 
+default_env(Key, Dflt) ->
+    case application:get_env(Key) of
+        {ok, V} ->
+            V;
+        _ ->
+            Dflt
+    end.
+
 addpool(Service, Name, IP, Port) ->
     PoolConfig = [{name, Name},
                   {group, list_to_atom(Service)},
-                  {max_count, 5},
-                  {init_count, 2},
+                  {max_count, default_env(pool_max, 5)},
+                  {init_count, default_env(pool_initial, 2)},
                   {start_mfa,
                    {mdns_client_lib_worker,
                     start_link, [Name, IP, Port, self()]}}],
