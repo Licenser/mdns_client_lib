@@ -14,9 +14,9 @@ start_link(Name, IP, Port, Master) ->
     gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
+    process_flag(trap_exit, true),
     lager:debug("[MDNS Client:~p] Initialization started.",
                 [Name]),
-    process_flag(trap_exit, true),
     Timeout = case application:get_env(recv_timeout) of
                   {ok, T} ->
                       T;

@@ -216,7 +216,7 @@ handle_cast({add, Server, Options},
                         [Service, Name]),
             case Servers of
                 [] ->
-                    lager:debug("[mdns_client_lib:~s] First endpoint."),
+                    lager:debug("[mdns_client_lib:~s] First endpoint.", [Service]),
                     mdns_client_lib_connection_event:notify_connect(Service);
                 _ ->
                     ok
@@ -254,7 +254,7 @@ handle_cast({downvote, BadName, Amount}, #state{service = Service,
                     Name =:= BadName,
                     (Cnt + Amount) >= ?MAX_VOTES ->
                   NewCnt = Cnt + Amount,
-                  lager:warning("[mdns_client_lib:~s/~p] Removing endpoint ~p "
+                  lager:warning("[mdns_client_lib:~s/~p] Removing endpoint "
                                 "for too many downvotes (~p/~p).",
                                 [BadName, NewCnt, ?MAX_VOTES]),
                   pooler:rm_pool(BadName),
