@@ -25,7 +25,7 @@ init([Name, IP, Port, Master]) ->
         {ok, Socket} ->
             {ok, #state{name=Name, socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}};
         E ->
-            mdns_client_lib_server:downvote_endpoint(Master, Name),
+            mdns_client_lib_server:downvote_endpoint(Master, Name, 3),
             {stop, E, #state{name=Name, master=Master, ip=IP, port=Port, timeout=Timeout}}
     end.
 
