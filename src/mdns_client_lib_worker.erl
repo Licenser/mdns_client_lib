@@ -21,28 +21,38 @@ init([Name, IP, Port, Master]) ->
                   _ ->
                       1500
               end,
-    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], Timeout) of
+    case gen_tcp:connect(IP, Port,
+                         [binary, {active,false}, {packet,4}],
+                         Timeout) of
         {ok, Socket} ->
-            {ok, #state{name=Name, socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}};
+            {ok, #state{name=Name, socket=Socket, master=Master, ip=IP,
+                        port=Port, timeout=Timeout}};
         E ->
-            mdns_client_lib_server:downvote_endpoint(Master, Name, 3),
-            {stop, E, #state{name=Name, master=Master, ip=IP, port=Port, timeout=Timeout}}
+            Pid = self(),
+            lager:error("[MDNS Client:~p] Initialization failed: ~p.",
+                        [Name, E]),
+            reconnect(Pid),
+            {ok, #state{name=Name, master=Master, ip=IP, port=Port,
+                        timeout=Timeout}}
     end.
 
 handle_call({call, Command}, _From,
-            #state{socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}=State) ->
+            #state{socket=Socket, master=Master, ip=IP, port=Port,
+                   timeout=Timeout}=State) ->
     case gen_tcp:send(Socket, term_to_binary(Command)) of
         ok ->
             case gen_tcp:recv(Socket, 0, Timeout) of
-                {error, E} when E =:= enotconn orelse E =:= closed ->
-                    lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
+                {error, E} ->
+                    lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p",
+                                [Master, IP, Port, E]),
                     reconnect(self()),
                     {reply, {error, E}, State};
                 Res ->
                     {reply, Res, State}
             end;
         E ->
-            lager:error("[mdns_client_lib:~p] send error on ~p:~p: ~p", [Master, IP, Port, E]),
+            lager:error("[MDNS Client:~p] send error on ~p:~p: ~p",
+                        [Master, IP, Port, E]),
             reconnect(self()),
             {reply, E, State}
     end;
@@ -50,15 +60,19 @@ handle_call({call, Command}, _From,
 handle_call(_Request, _From, State) ->
     {reply, ok, State}.
 
-handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master, ip = IP, port = Port}) ->
+handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
+                                      ip = IP, port = Port}) ->
     mdns_client_lib_server:downvote_endpoint(Master, Name),
     gen_tcp:close(S0),
     case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250) of
         {ok, Socket} ->
             {noreply, State#state{socket = Socket}};
         E ->
+            lager:error("[MDNS Client:~p] reconnect failed: ~p.",
+                        [Name, E]),
             mdns_client_lib_server:downvote_endpoint(Master, Name, 3),
-            {stop, E, State}
+            reconnect(self()),
+            {noreply, State}
     end;
 
 handle_cast(_Msg, State) ->

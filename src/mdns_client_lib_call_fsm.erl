@@ -87,12 +87,12 @@ get_worker(_, State = #state{retry=Retry}) when Retry > ?RETRIES ->
 get_worker(_, State = #state{service=Service, retry=Retry, worker=undefined}) ->
     case pooler:take_group_member(Service) of
         {error_no_group, G} ->
-            lager:warning("[MDNS Cleint] Group ~p:~p does not exist.",
+            lager:warning("[MDNS Client:~s] Group ~p does not exist.",
                           [Service, G]),
             {next_state, get_worker, State#state{retry = Retry + 1},
              random:uniform(?RETRY_DELAY)};
         error_no_members ->
-            lager:warning("[MDNS Cleint] Service ~p has no free members.",
+            lager:warning("[MDNS Client:~p] Service has no free members.",
                           [Service]),
             {next_state, get_worker, State#state{retry = Retry + 1},
              random:uniform(?RETRY_DELAY)};

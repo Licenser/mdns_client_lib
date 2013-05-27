@@ -127,6 +127,7 @@ start_link(Service) ->
 %% @end
 %%--------------------------------------------------------------------
 init([Service]) ->
+    process_flag(trap_exit, true),
     Type = "_" ++ Service ++ "._tcp",
     mdns_client:add_type("_" ++ Service ++ "._tcp"),
     ok = mdns_node_discovery_event:add_handler(
@@ -195,20 +196,27 @@ addpool(Service, Name, IP, Port) ->
                   {start_mfa,
                    {mdns_client_lib_worker,
                     start_link, [Name, IP, Port, self()]}}],
+    lager:info("[mdns_client_lib] Creating new pool ~p in group ~s.",
+               [Name, Service]),
     pooler:new_pool(PoolConfig).
 
 handle_cast({add, Server, Options},
             #state{servers = Servers,
                    service = Service} = State) ->
+
     {ip, IP} = lists:keyfind(ip, 1, Options),
     {port, Port} = lists:keyfind(port, 1, Options),
     IPort = list_to_integer(binary_to_list(Port)),
     IPS = binary_to_list(IP),
     Name = list_to_atom(Service ++ "@" ++ IPS ++ ":" ++ binary_to_list(Port)),
+    lager:debug("[mdns_client_lib:~s] New broadcast from ~p", [Service, Name]),
     case lists:keyfind({Server, Options}, 1, Servers) of
         false ->
+            lager:debug("[mdns_client_lib:~s/~p] Is not know, adding it.",
+                        [Service, Name]),
             case Servers of
                 [] ->
+                    lager:debug("[mdns_client_lib:~s] First endpoint."),
                     mdns_client_lib_connection_event:notify_connect(Service);
                 _ ->
                     ok
@@ -217,7 +225,10 @@ handle_cast({add, Server, Options},
             {noreply, State#state{servers=[{{Server, Options}, Name, 0} | Servers]}};
         _ ->
             S1 = [case S of
-                      {Opts, N, _} when N =:= Name ->
+                      {Opts, N, Old} when N =:= Name ->
+                          lager:debug("[mdns_client_lib:~s/~p] "
+                                      "Known, resetting downvotes ~p->0.",
+                                      [Service, Name, Old]),
                           {Opts, N, 0};
                       _ ->
                           S
@@ -236,20 +247,23 @@ handle_cast({sure_cast, Message}, #state{service = Service} = State) ->
     mdns_client_lib_call_fsm:sure_cast(Service, self(), Message),
     {noreply, State};
 
-handle_cast({downvote, BadName, Amount}, #state{servers = Servers} = State) ->
+handle_cast({downvote, BadName, Amount}, #state{service = Service,
+                                                servers = Servers} = State) ->
     S1 = [case S of
               {Opts, Name, Cnt} when
                     Name =:= BadName,
                     (Cnt + Amount) >= ?MAX_VOTES ->
                   NewCnt = Cnt + Amount,
-                  lager:warning("[mdns_client_lib] Removing pool ~p for too "
-                                "many downvotes (~p/~p)", [BadName, NewCnt, ?MAX_VOTES]),
+                  lager:warning("[mdns_client_lib:~s/~p] Removing endpoint ~p "
+                                "for too many downvotes (~p/~p).",
+                                [BadName, NewCnt, ?MAX_VOTES]),
                   pooler:rm_pool(BadName),
                   {Opts, Name, NewCnt};
               {Opts, Name, Cnt} when Name =:= BadName ->
                   NewCnt = Cnt + Amount,
-                  lager:warning("[mdns_client_lib] downvoting ~p to (~p/~p)",
-                                [BadName, NewCnt, ?MAX_VOTES]),
+                  lager:warning("[mdns_client_lib:~s/~p] "
+                                "downvoted by ~p to ~p.",
+                                [Service, BadName, Amount, NewCnt]),
                   {Opts, Name, NewCnt};
               Srv ->
                   Srv
@@ -257,9 +271,14 @@ handle_cast({downvote, BadName, Amount}, #state{servers = Servers} = State) ->
     S2 = [S || S = {_, _, Cnt} <- S1, Cnt < ?MAX_VOTES],
     {noreply, State#state{servers = S2}};
 
-handle_cast({remove, BadID}, #state{servers = Servers} = State) ->
-    [pooler:rm_pool(Pool) || {_ID, Pool,_} <- Servers, _ID =:= BadID],
-    S2 = [S || S = {ID,_ ,_} <- Servers, ID =/= BadID],
+handle_cast({remove, BadID}, #state{service = Service,
+                                    servers = Servers} = State) ->
+    [begin
+         lager:warning("[mdns_client_lib:~s/~s] Removing endpoint by force.",
+                       [Service, Pool]),
+         pooler:rm_pool(Pool)
+     end || {_ID, Pool, _} <- Servers, _ID =:= BadID],
+    S2 = [S || S = {_ID,_ ,_} <- Servers, _ID =/= BadID],
     {noreply, State#state{servers = S2}};
 
 handle_cast(_Msg, State) ->
