@@ -247,7 +247,10 @@ handle_cast({downvote, BadName, Amount}, #state{servers = Servers} = State) ->
                   pooler:rm_pool(BadName),
                   {Opts, Name, NewCnt};
               {Opts, Name, Cnt} when Name =:= BadName ->
-                  {Opts, Name, Cnt + Amount};
+                  NewCnt = Cnt + Amount,
+                  lager:warning("[mdns_client_lib] downvoting ~p to (~p/~p)",
+                                [BadName, NewCnt, ?MAX_VOTES]),
+                  {Opts, Name, NewCnt};
               Srv ->
                   Srv
           end || S <- Servers],

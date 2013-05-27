@@ -57,7 +57,7 @@ handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master, i
         {ok, Socket} ->
             {noreply, State#state{socket = Socket}};
         E ->
-            mdns_client_lib_server:downvote_endpoint(Master, Name),
+            mdns_client_lib_server:downvote_endpoint(Master, Name, 3),
             {stop, E, State}
     end;
 
