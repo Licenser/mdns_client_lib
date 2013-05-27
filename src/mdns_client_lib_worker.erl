@@ -14,6 +14,8 @@ start_link(Name, IP, Port, Master) ->
     gen_server:start_link(?MODULE, [Name, IP, Port, Master], []).
 
 init([Name, IP, Port, Master]) ->
+    lager:debug("[MDNS Client:~p] Initialization started.",
+                [Name]),
     process_flag(trap_exit, true),
     Timeout = case application:get_env(recv_timeout) of
                   {ok, T} ->
@@ -25,6 +27,9 @@ init([Name, IP, Port, Master]) ->
                          [binary, {active,false}, {packet,4}],
                          Timeout) of
         {ok, Socket} ->
+            lager:debug("[MDNS Client:~p] Initialization successful.",
+                        [Name]),
+
             {ok, #state{name=Name, socket=Socket, master=Master, ip=IP,
                         port=Port, timeout=Timeout}};
         E ->
@@ -81,8 +86,10 @@ handle_cast(_Msg, State) ->
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, #state{socket=Socket}) ->
+terminate(Reason, #state{name = Name, socket=Socket}) ->
     gen_tcp:close(Socket),
+    lager:error("[MDNS Client:~p] Terminted with rewaon: ~p.",
+                [Name, Reason]),
     ok.
 
 code_change(_OldVsn, State, _Extra) ->
