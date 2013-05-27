@@ -258,7 +258,7 @@ handle_cast({downvote, BadName, Amount}, #state{servers = Servers} = State) ->
     {noreply, State#state{servers = S2}};
 
 handle_cast({remove, BadID}, #state{servers = Servers} = State) ->
-    [pooler:rm_pool(Pool) || S = {_ID, Pool,_} <- Servers, _ID =:= BadID],
+    [pooler:rm_pool(Pool) || {_ID, Pool,_} <- Servers, _ID =:= BadID],
     S2 = [S || S = {ID,_ ,_} <- Servers, ID =/= BadID],
     {noreply, State#state{servers = S2}};
 
