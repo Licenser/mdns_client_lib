@@ -37,7 +37,7 @@ handle_call({call, Command}, _From,
                 {error, E} when E =:= enotconn orelse E =:= closed ->
                     lager:error("[mdns_client_lib:~p] recv error on ~p:~p: ~p", [Master, IP, Port, E]),
                     reconnect(self()),
-                    {reply, {error, E}, reconnect(State)};
+                    {reply, {error, E}, State};
                 Res ->
                     {reply, Res, State}
             end;
