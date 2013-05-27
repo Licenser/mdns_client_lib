@@ -81,6 +81,8 @@ init([Service, Handler, Command, From, Type]) ->
                }, 0}.
 
 
+get_worker(_, State = #state{retry=Retry}) when Retry > ?RETRIES ->
+    {stop, {error, no_connection}, State};
 
 get_worker(_, State = #state{service=Service, retry=Retry, worker=undefined}) ->
     case pooler:take_group_member(Service) of
@@ -95,15 +97,14 @@ get_worker(_, State = #state{service=Service, retry=Retry, worker=undefined}) ->
             {next_state, get_worker, State#state{retry = Retry + 1},
              random:uniform(?RETRY_DELAY)};
         Worker ->
-            {next_state, do, State#state{worker = Worker}, 0}
+            {next_state, do, State#state{worker = Worker, retry = Retry + 1}, 0}
     end;
 get_worker(_, State = #state{service=Service, worker = Worker}) ->
     pooler:return_group_member(Service, Worker),
     {next_state, get_worker, State#state{worker = undefined}, 0}.
 
 
-do(_, #state{from = From, command = Command,
-             retry = Retry, worker = Worker} = State) ->
+do(_, #state{from = From, command = Command, worker = Worker} = State) ->
     case gen_server:call(Worker, {call, Command}) of
         {ok, Res} ->
             case From of
@@ -115,8 +116,7 @@ do(_, #state{from = From, command = Command,
             {stop, normal, State};
         {error, E} when E =:= enotconn orelse
                         E =:= closed ->
-            {next_state, get_worker, State#state{retry = Retry + 1},
-             random:uniform(?RETRY_DELAY)};
+            {next_state, get_worker, State, 0};
         E ->
             gen_server:reply(From, {error, E}),
             {stop, normal, State}
