@@ -27,13 +27,14 @@
          code_change/4]).
 
 -export([
+         get_worker/2,
          do/2
         ]).
 
 -define(SERVER, ?MODULE).
 -define(RETRY_DELAY, 150).
 -define(RETRIES, 10).
--record(state, {service, handler, command, from, socket, type, retry = 0}).
+-record(state, {service, handler, command, from, socket, type, retry = 0, worker}).
 
 %%%===================================================================
 %%% API
@@ -71,7 +72,7 @@ cast(Service, Handler, Command) ->
 init([Service, Handler, Command, From, Type]) ->
     process_flag(trap_exit, true),
     random:seed(now()),
-    {ok, do, #state{
+    {ok, get_worker, #state{
                 service = Service,
                 command = Command,
                 handler = Handler,
@@ -79,38 +80,46 @@ init([Service, Handler, Command, From, Type]) ->
                 from = From
                }, 0}.
 
-do(_Event, #state{retry=?RETRIES, from=From} = State) ->
-    gen_server:reply(From, {error, busy}),
-    {stop, normal, State};
 
-do(_Event, #state{service=Service, from=From, command = Command, retry=Retry} = State) ->
+
+get_worker(_, State = #state{service=Service, retry=Retry, worker=undefined}) ->
     case pooler:take_group_member(Service) of
         {error_no_group, G} ->
-            lager:warning("[MDNS Cleint] Group ~p for service ~p does not exist.", [G, Service]),
-            {next_state, do, State#state{retry = Retry + 1}, random:uniform(?RETRY_DELAY)};
+            lager:warning("[MDNS Cleint] Group ~p:~p does not exist.",
+                          [Service, G]),
+            {next_state, get_worker, State#state{retry = Retry + 1},
+             random:uniform(?RETRY_DELAY)};
         error_no_members ->
-            lager:warning("[MDNS Cleint] Service ~p has no free members.", [Service]),
-            {next_state, do, State#state{retry = Retry + 1}, random:uniform(?RETRY_DELAY)};
+            lager:warning("[MDNS Cleint] Service ~p has no free members.",
+                          [Service]),
+            {next_state, get_worker, State#state{retry = Retry + 1},
+             random:uniform(?RETRY_DELAY)};
         Worker ->
-            case gen_server:call(Worker, {call, Command}) of
-                {ok, Res} ->
-                    case From of
-                        undefined ->
-                            ok;
-                        _ ->
-                            gen_server:reply(From, binary_to_term(Res))
-                    end,
-                    pooler:return_group_member(Service, Worker),
-                    {stop, normal, State};
-                {error, E} when E =:= enotconn orelse
-                                E =:= closed ->
-                    pooler:return_group_member(Service, Worker),
-                    {next_state, do, State#state{retry = Retry + 1}, random:uniform(?RETRY_DELAY)};
-                E ->
-                    gen_server:reply(From, {error, E}),
-                    pooler:return_group_member(Service, Worker),
-                    {stop, normal, State}
-            end
+            {next_state, do, State#state{worker = Worker}, 0}
+    end;
+get_worker(_, State = #state{service=Service, worker = Worker}) ->
+    pooler:return_group_member(Service, Worker),
+    {next_state, get_worker, State#state{worker = undefined}, 0}.
+
+
+do(_, #state{from = From, command = Command,
+             retry = Retry, worker = Worker} = State) ->
+    case gen_server:call(Worker, {call, Command}) of
+        {ok, Res} ->
+            case From of
+                undefined ->
+                    ok;
+                _ ->
+                    gen_server:reply(From, binary_to_term(Res))
+            end,
+            {stop, normal, State};
+        {error, E} when E =:= enotconn orelse
+                        E =:= closed ->
+            {next_state, get_worker, State#state{retry = Retry + 1},
+             random:uniform(?RETRY_DELAY)};
+        E ->
+            gen_server:reply(From, {error, E}),
+            {stop, normal, State}
     end.
 
 %%--------------------------------------------------------------------
@@ -176,11 +185,26 @@ handle_info(_Info, StateName, State) ->
 %% @spec terminate(Reason, StateName, State) -> void()
 %% @end
 %%--------------------------------------------------------------------
-terminate(normal, _StateName, _State) ->
+terminate(normal, _StateName, #state{service = Service,
+                                     worker = Worker}) ->
+    pooler:return_group_member(Service, Worker),
     ok;
-terminate(_Reason, _StateName, _State = #state{from = undefined}) ->
+terminate(_Reason, _StateName, _State = #state{worker = undefined,
+                                               from = undefined}) ->
     ok;
-terminate(Reason, _StateName, _State = #state{from = From}) ->
+terminate(_Reason, _StateName, _State = #state{service = Service,
+                                               worker = Worker,
+                                               from = undefined}) ->
+    pooler:return_group_member(Service, Worker),
+    ok;
+terminate(Reason, _StateName, _State = #state{worker = undefined,
+                                              from = From}) ->
+    gen_server:reply(From, {error, Reason}),
+    ok;
+terminate(Reason, _StateName, _State = #state{service = Service,
+                                              worker = Worker,
+                                              from = From}) ->
+    pooler:return_group_member(Service, Worker),
     gen_server:reply(From, {error, Reason}),
     ok.
 
