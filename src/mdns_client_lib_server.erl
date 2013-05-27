@@ -42,6 +42,8 @@
          IPS::inet:ip_address() | inet:hostname(),
          IPort::inet:port_number()}.
 
+-define(MAX_VOTES, 10).
+
 %%%===================================================================
 %%% API
 %%%===================================================================
@@ -238,15 +240,18 @@ handle_cast({downvote, BadName, Amount}, #state{servers = Servers} = State) ->
     S1 = [case S of
               {Opts, Name, Cnt} when
                     Name =:= BadName,
-                    (Cnt - Amount) =< -10 ->
+                    (Cnt + Amount) >= ?MAX_VOTES ->
+                  NewCnt = Cnt + Amount,
+                  lager:warning("[mdns_client_lib] Removing pool ~p for too "
+                                "many downvotes (~p/~p)", [BadName, NewCnt, ?MAX_VOTES]),
                   pooler:rm_pool(BadName),
-                  {Opts, Name, -10};
+                  {Opts, Name, NewCnt};
               {Opts, Name, Cnt} when Name =:= BadName ->
-                  {Opts, Name, Cnt - Amount};
+                  {Opts, Name, Cnt + Amount};
               Srv ->
                   Srv
           end || S <- Servers],
-    S2 = [S || S = {_, _, Cnt} <- S1, Cnt > -10],
+    S2 = [S || S = {_, _, Cnt} <- S1, Cnt < ?MAX_VOTES],
     {noreply, State#state{servers = S2}};
 
 handle_cast({remove, BadID}, #state{servers = Servers} = State) ->
