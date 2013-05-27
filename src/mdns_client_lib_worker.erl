@@ -21,8 +21,13 @@ init([Name, IP, Port, Master]) ->
                   _ ->
                       1500
               end,
-    {ok, Socket} = gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], Timeout),
-    {ok, #state{name=Name, socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}}.
+    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], Timeout) of
+        {ok, Socket} ->
+            {ok, #state{name=Name, socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}};
+        E ->
+            mdns_client_lib_server:downvote_endpoint(Master, Name),
+            {stop, E, #state{name=Name, master=Master, ip=IP, port=Port, timeout=Timeout}}
+    end.
 
 handle_call({call, Command}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port, timeout=Timeout}=State) ->
