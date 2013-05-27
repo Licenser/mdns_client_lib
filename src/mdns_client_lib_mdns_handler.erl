@@ -3,11 +3,11 @@
 -behaviour(gen_event).
 
 -export([init/1,
-	 terminate/2,
-	 handle_info/2,
-	 handle_event/2,
-	 code_change/3,
-	 handle_call/2]).
+         terminate/2,
+         handle_info/2,
+         handle_event/2,
+         code_change/3,
+         handle_call/2]).
 
 init([Type, Pid]) ->
     {ok, {Type, Pid}}.
@@ -20,9 +20,9 @@ terminate(stop, _) ->
 
 terminate(Error, State) ->
     error_logger:error_report([{module, ?MODULE},
-			       {self, self()},
-			       {error, Error},
-			       {state, State}]).
+                               {self, self()},
+                               {error, Error},
+                               {state, State}]).
 
 handle_event({service_add, Type, Host, Options}, {Type, Pid}) ->
     mdns_client_lib_server:add_endpoint(Pid, Host, Options),
@@ -40,7 +40,6 @@ handle_info({'EXIT', _, shutdown}, _) ->
 
 code_change(_, _, State) ->
     {ok, State}.
-
 
 handle_call(_, State) ->
     {ok, ok, State}.
