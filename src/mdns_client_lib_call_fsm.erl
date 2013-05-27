@@ -33,7 +33,7 @@
 
 -define(SERVER, ?MODULE).
 -define(RETRY_DELAY, 150).
--define(RETRIES, 10).
+-define(RETRIES, 4).
 -record(state, {service, handler, command, from, socket, type, retry = 0, worker}).
 
 %%%===================================================================
@@ -114,9 +114,6 @@ do(_, #state{from = From, command = Command, worker = Worker} = State) ->
                     gen_server:reply(From, binary_to_term(Res))
             end,
             {stop, normal, State};
-        {error, E} when E =:= enotconn orelse
-                        E =:= closed ->
-            {next_state, get_worker, State, 0};
         E ->
             gen_server:reply(From, {error, E}),
             {stop, normal, State}
