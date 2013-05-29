@@ -156,7 +156,7 @@ handle_call(get_server, _From, State = #state{servers = Servers}) ->
     N = length(Servers),
     {{_, Options},_,_} = lists:nth(random:uniform(N), Servers),
     {port, PortB} = lists:keyfind(port, 1, Options),
-    {port, IPB} = lists:keyfind(ip, 1, Options),
+    {ip, IPB} = lists:keyfind(ip, 1, Options),
     {reply,
      {ok, binary_to_list(IPB),
       list_to_integer(binary_to_list(PortB))},
