@@ -15,6 +15,9 @@
          {address, {224, 0, 0, 251}},
          {service, "generic"},
          {recv_timeout, 1500},
+         {max_retries, 4},
+         {max_downvotes, 5},
          {pool_max, 5},
+         {retry_delay, 150},
          {pool_initial, 2}]}
  ]}.

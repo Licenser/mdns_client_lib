@@ -32,9 +32,8 @@
         ]).
 
 -define(SERVER, ?MODULE).
--define(RETRY_DELAY, 150).
--define(RETRIES, 4).
--record(state, {service, handler, command, from, socket, type, retry = 0, worker}).
+-record(state, {service, handler, command, from, socket, type, retry = 0,
+                worker, max_retries, retry_delay}).
 
 %%%===================================================================
 %%% API
@@ -53,7 +52,9 @@
 %%--------------------------------------------------------------------
 
 start_link(Service, Handler, Command, From, Type) ->
-    gen_fsm:start_link(?MODULE, [list_to_atom(Service), Handler, Command, From, Type], []).
+    gen_fsm:start_link(?MODULE,
+                       [list_to_atom(Service), Handler, Command, From, Type],
+                       []).
 
 call(Service, Handler, Command, From) ->
     supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, call]).
@@ -72,30 +73,36 @@ cast(Service, Handler, Command) ->
 init([Service, Handler, Command, From, Type]) ->
     process_flag(trap_exit, true),
     random:seed(now()),
+    {ok, Retries} = application:get_env(max_retries),
+    {ok, RetryDelay} = application:get_env(retry_delay),
     {ok, get_worker, #state{
-                service = Service,
-                command = Command,
-                handler = Handler,
-                type = Type,
-                from = From
-               }, 0}.
+                        max_retries = Retries,
+                        retry_delay = RetryDelay,
+                        service = Service,
+                        command = Command,
+                        handler = Handler,
+                        type = Type,
+                        from = From
+                       }, 0}.
 
 
-get_worker(_, State = #state{retry=Retry}) when Retry > ?RETRIES ->
+get_worker(_, State = #state{retry = R, max_retries = M})
+  when R > M ->
     {stop, {error, no_connection}, State};
 
-get_worker(_, State = #state{service=Service, retry=Retry, worker=undefined}) ->
+get_worker(_, State = #state{service=Service, retry=Retry,
+                             worker=undefined, retry_delay = Deleay}) ->
     case pooler:take_group_member(Service) of
         {error_no_group, G} ->
             lager:warning("[MDNS Client:~s] Group ~p does not exist.",
                           [Service, G]),
             {next_state, get_worker, State#state{retry = Retry + 1},
-             random:uniform(?RETRY_DELAY)};
+             random:uniform(Deleay)};
         error_no_members ->
             lager:warning("[MDNS Client:~p] Service has no free members.",
                           [Service]),
             {next_state, get_worker, State#state{retry = Retry + 1},
-             random:uniform(?RETRY_DELAY)};
+             random:uniform(Deleay)};
         Worker ->
             {next_state, do, State#state{worker = Worker, retry = Retry + 1}, 0}
     end;

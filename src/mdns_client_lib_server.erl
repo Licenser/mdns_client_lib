@@ -32,7 +32,8 @@
 
 -record(state, {
           servers = [],
-          service
+          service,
+          max_downvotes
          }).
 
 -type mdns_server_name() :: string().
@@ -42,7 +43,6 @@
          IPS::inet:ip_address() | inet:hostname(),
          IPort::inet:port_number()}.
 
--define(MAX_VOTES, 10).
 
 %%%===================================================================
 %%% API
@@ -133,7 +133,11 @@ init([Service]) ->
     ok = mdns_node_discovery_event:add_handler(
            mdns_client_lib_mdns_handler,
            [list_to_binary(Type), self()]),
-    {ok, #state{service = Service}}.
+    {ok, MaxDownvotes} = application:get_env(max_downvotes),
+    {ok, #state{
+            service = Service,
+            max_downvotes = MaxDownvotes
+           }}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -260,15 +264,16 @@ handle_cast({sure_cast, Message}, #state{service = Service} = State) ->
     {noreply, State};
 
 handle_cast({downvote, BadName, Amount}, #state{service = Service,
-                                                servers = Servers} = State) ->
+                                                servers = Servers,
+                                                max_downvotes = MaxDVs} = State) ->
     S1 = [case S of
               {Opts, Name, Cnt} when
                     Name =:= BadName,
-                    (Cnt + Amount) >= ?MAX_VOTES ->
+                    (Cnt + Amount) >= MaxDVs ->
                   NewCnt = Cnt + Amount,
                   lager:warning("[mdns_client_lib:~s/~p] Removing endpoint "
                                 "for too many downvotes (~p/~p).",
-                                [BadName, NewCnt, ?MAX_VOTES]),
+                                [BadName, NewCnt, MaxDVs]),
                   pooler:rm_pool(BadName),
                   {Opts, Name, NewCnt};
               {Opts, Name, Cnt} when Name =:= BadName ->
@@ -280,7 +285,7 @@ handle_cast({downvote, BadName, Amount}, #state{service = Service,
               Srv ->
                   Srv
           end || S <- Servers],
-    S2 = [S || S = {_, _, Cnt} <- S1, Cnt < ?MAX_VOTES],
+    S2 = [S || S = {_, _, Cnt} <- S1, Cnt < MaxDVs],
     {noreply, State#state{servers = S2}};
 
 handle_cast({remove, BadID}, #state{service = Service,
