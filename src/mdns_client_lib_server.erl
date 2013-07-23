@@ -225,7 +225,6 @@ handle_cast({add, Server, Options},
     IPort = list_to_integer(binary_to_list(Port)),
     IPS = binary_to_list(IP),
     Name = list_to_atom(Service ++ "@" ++ IPS ++ ":" ++ binary_to_list(Port)),
-    lager:debug("[mdns_client_lib:~s] New broadcast from ~p", [Service, Name]),
     case lists:keyfind({Server, Options}, 1, Servers) of
         false ->
             lager:debug("[mdns_client_lib:~s/~p] Is not know, adding it.",
@@ -241,6 +240,8 @@ handle_cast({add, Server, Options},
             {noreply, State#state{servers=[{{Server, Options}, Name, 0} | Servers]}};
         _ ->
             S1 = [case S of
+                      {Opts, N, 0} when N =:= Name ->
+                          {Opts, N, 0};
                       {Opts, N, Old} when N =:= Name ->
                           lager:debug("[mdns_client_lib:~s/~p] "
                                       "Known, resetting downvotes ~p->0.",

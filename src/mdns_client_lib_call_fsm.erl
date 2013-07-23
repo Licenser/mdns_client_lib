@@ -28,6 +28,7 @@
 
 -export([
          get_worker/2,
+         test_worker/2,
          do/2
         ]).
 
@@ -104,22 +105,39 @@ get_worker(_, State = #state{service=Service, retry=Retry,
             {next_state, get_worker, State#state{retry = Retry + 1},
              random:uniform(Deleay)};
         Worker ->
-            {next_state, do, State#state{worker = Worker, retry = Retry + 1}, 0}
+            {next_state, test_worker, State#state{worker = Worker, retry = Retry + 1}, 0}
     end;
+
 get_worker(_, State = #state{service=Service, worker = Worker}) ->
     pooler:return_group_member(Service, Worker),
     {next_state, get_worker, State#state{worker = undefined}, 0}.
 
+test_worker(_, #state{worker = Worker, service=Service} = State) ->
+    case gen_server:call(Worker, {call, ping}) of
+        {ok, Res} ->
+            case binary_to_term(Res) of
+                pong ->
+                    {next_state, do, State, 0};
+                E ->
+                    lager:warning("[MDNS Client: ~p] Test for worker failed, "
+                                  "no pong returned: ~p.",
+                                  [Service, E]),
+                    {next_state, get_worker, State, 0}
+            end;
+        E ->
+            lager:warning("[MDNS Client: ~p] Test for worker failed: ~p.",
+                          [Service, E]),
+            {next_state, get_worker, State, 0}
+    end.
+
+do(_, #state{from = undefined, command = Command, worker = Worker} = State) ->
+    gen_server:call(Worker, {call, Command}),
+    {stop, normal, State};
 
 do(_, #state{from = From, command = Command, worker = Worker} = State) ->
     case gen_server:call(Worker, {call, Command}) of
         {ok, Res} ->
-            case From of
-                undefined ->
-                    ok;
-                _ ->
-                    gen_server:reply(From, binary_to_term(Res))
-            end,
+            gen_server:reply(From, binary_to_term(Res)),
             {stop, normal, State};
         E ->
             gen_server:reply(From, {error, E}),

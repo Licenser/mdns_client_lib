@@ -41,6 +41,8 @@ init([Name, IP, Port, Master]) ->
                         timeout=Timeout}}
     end.
 
+
+
 handle_call({call, Command}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port,
                    timeout=Timeout}=State) ->
