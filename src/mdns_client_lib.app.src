@@ -1,6 +1,6 @@
 {application, mdns_client_lib,
  [{description, ""},
-  {vsn, "0.1.8"},
+  {vsn, "0.1.11"},
   {registered, []},
   {applications, [
                   kernel,
