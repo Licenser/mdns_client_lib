@@ -6,35 +6,40 @@
 
 %% @doc The IP of the interface mdns traffic is received.
 %% a ip of 0.0.0.0 means the first found interface. The default is 5453
-{mapping, "mdns.client.ip", "mdns_client_lib.interface",
+{mapping, "mdns.client.interface", "mdns_client_lib.interface",
  [{default, "0.0.0.0"}]}. % this should be IP but IP requires a port.
 
 {translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         [{_, IP}] = cuttlefish_util:filter_by_variable_starts_with("mdns.client.ip", Conf),
+         IP = proplists:get_value(["mdns", "client", "interface"], Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
  end
 }.
 
-{mapping, "mdns.client.port", "mdns_client_lib.port",
- [{default, 5353},
-  {datatype, integer}]}. % this should be IP but IP requires a port.
-
 %% @doc The multicast group the MDNS service is running on.
-{mapping, "mdns.client.multicast_group", "mdns_client_lib.address",
- [{default, "224.0.0.251"},
-  {datatype, string}]}. % this should be IP but IP requires a port.
+{mapping, "mdns.client.multicast_group", "mdns_client_lib.multicast_group",
+ [{default, {"224.0.0.251", 5353}},
+  {datatype, ip}]}.
+
 
 {translation,
  "mdns_client_lib.address",
  fun(Conf) ->
-         [{_,IP}] = cuttlefish_util:filter_by_variable_starts_with("mdns.client.multicast_group", Conf),
+         {IP, _Port} = proplists:get_value(["mdns", "client", "multicast"], Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
+ end
+}.
+
+{translation,
+ "mdns_client_lib.port",
+ fun(Conf) ->
+         {_IP, Port} = proplists:get_value(["mdns", "client", "multicast"], Conf),
+         Port
  end
 }.
 
