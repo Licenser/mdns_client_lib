@@ -12,7 +12,7 @@
 {translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         cuttlefish_util:conf_get_value("mdns.client.interface", Conf),
+         IP = cuttlefish_util:conf_get_value("mdns.client.interface", Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
