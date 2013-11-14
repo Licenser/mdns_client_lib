@@ -46,6 +46,7 @@
 %% @doc The service to listen to, it will be prepended to the domain.
 {mapping, "mdns.client.service", "mdns_client_lib.service",
  [{default, "generic"},
+  {level, advanced},
   {datatype, string}]}.
 
 %% @doc the time that the mdns client iwll wait for a reply from a counterpart
