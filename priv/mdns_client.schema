@@ -12,7 +12,7 @@
 {translation,
  "mdns_client_lib.interface",
  fun(Conf) ->
-         IP = proplists:get_value(["mdns", "client", "interface"], Conf),
+         cuttlefish_util:conf_get_value("mdns.client.interface", Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
@@ -28,7 +28,7 @@
 {translation,
  "mdns_client_lib.address",
  fun(Conf) ->
-         {IP, _Port} = proplists:get_value(["mdns", "client", "multicast"], Conf),
+         {IP, _Port} = cuttlefish_util:conf_get_value("mdns.client.multicast_group", Conf),
          [A, B, C, D] = [list_to_integer(O) ||
                             O <- re:split(IP, "\\.", [{return, list}])],
          {A, B, C, D}
@@ -38,7 +38,7 @@
 {translation,
  "mdns_client_lib.port",
  fun(Conf) ->
-         {_IP, Port} = proplists:get_value(["mdns", "client", "multicast"], Conf),
+         {_IP, Port} = cuttlefish_util:conf_get_value("mdns.client.multicast_group", Conf),
          Port
  end
 }.
