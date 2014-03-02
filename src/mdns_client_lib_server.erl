@@ -272,7 +272,7 @@ handle_cast({downvote, BadName, Amount}, #state{service = Service,
                     Name =:= BadName,
                     (Cnt + Amount) >= MaxDVs ->
                   NewCnt = Cnt + Amount,
-                  lager:warning("[mdns_client_lib:~s/~p] Removing endpoint "
+                  lager:warning("[mdns_client_lib:~p] Removing endpoint "
                                 "for too many downvotes (~p/~p).",
                                 [BadName, NewCnt, MaxDVs]),
                   pooler:rm_pool(BadName),

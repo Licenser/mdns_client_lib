@@ -15,6 +15,7 @@ start_link(Name, IP, Port, Master) ->
 
 init([Name, IP, Port, Master]) ->
     process_flag(trap_exit, true),
+    timer:send_interval(1000, do_ping),
     lager:debug("[MDNS Client:~p] Initialization started.",
                 [Name]),
     Timeout = case application:get_env(recv_timeout) of
@@ -33,15 +34,12 @@ init([Name, IP, Port, Master]) ->
             {ok, #state{name=Name, socket=Socket, master=Master, ip=IP,
                         port=Port, timeout=Timeout}};
         E ->
-            Pid = self(),
             lager:error("[MDNS Client:~p] Initialization failed: ~p.",
                         [Name, E]),
-            reconnect(Pid),
+            reconnect(self()),
             {ok, #state{name=Name, master=Master, ip=IP, port=Port,
                         timeout=Timeout}}
     end.
-
-
 
 handle_call({call, Command}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port,
@@ -84,6 +82,27 @@ handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
 
 handle_cast(_Msg, State) ->
     {noreply, State}.
+
+handle_info(ping,
+            #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
+    Pong = term_to_binary(pong),
+    case gen_tcp:send(Socket, term_to_binary(ping)) of
+        ok ->
+            case gen_tcp:recv(Socket, 0, 100) of
+                {error, E} ->
+                    lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p",
+                                [Master, IP, Port, E]),
+                    reconnect(self()),
+                    {noreply, State};
+                Res when Res =:= Pong  ->
+                    {noreply, State}
+            end;
+        E ->
+            lager:error("[MDNS Client:~p] send error on ~p:~p: ~p",
+                        [Master, IP, Port, E]),
+            reconnect(self()),
+            {noreply, State}
+    end;
 
 handle_info(_Info, State) ->
     {noreply, State}.
