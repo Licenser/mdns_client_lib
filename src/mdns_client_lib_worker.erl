@@ -94,7 +94,7 @@ handle_info(ping,
                                 [Master, IP, Port, E]),
                     reconnect(self()),
                     {noreply, State};
-                Res when Res =:= Pong  ->
+                {ok, Res} when Res =:= Pong  ->
                     {noreply, State}
             end;
         E ->
