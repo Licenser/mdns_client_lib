@@ -107,9 +107,12 @@ handle_info(ping,
 handle_info(_Info, State) ->
     {noreply, State}.
 
+terminate(Reason, #state{socket=undefined}) ->
+    ok;
+
 terminate(Reason, #state{name = Name, socket=Socket}) ->
     gen_tcp:close(Socket),
-    lager:error("[MDNS Client:~p] Terminted with rewaon: ~p.",
+    lager:error("[MDNS Client:~p] Terminted with reason: ~p.",
                 [Name, Reason]),
     ok.
 
