@@ -107,7 +107,7 @@ handle_info(ping,
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(Reason, #state{socket=undefined}) ->
+terminate(_Reason, #state{socket=undefined}) ->
     ok;
 
 terminate(Reason, #state{name = Name, socket=Socket}) ->
