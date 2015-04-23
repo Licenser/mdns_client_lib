@@ -69,7 +69,7 @@ handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
             {noreply, State}
     end.
 
-handle_info(ping,
+handle_info(do_ping,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     Pong = term_to_binary(pong),
     case gen_tcp:send(Socket, term_to_binary(ping)) of

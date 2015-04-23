@@ -88,7 +88,7 @@ call(Pid, Message) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message, Timeout) ->
-    gen_server:cast(Pid, {call, Message, Timeout}).
+    gen_server:call(Pid, {call, Message, Timeout}).
 
 -spec cast(pid(), Message::term()) ->
                   ok.
