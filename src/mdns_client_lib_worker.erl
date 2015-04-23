@@ -4,7 +4,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
          code_change/3]).
 
--record(state, {name, socket, master, ip, port, timeout=1500}).
+-record(state, {name, socket, master, ip, port}).
 
 
 reconnect(Pid) ->
@@ -18,32 +18,24 @@ init([Name, IP, Port, Master]) ->
     timer:send_interval(1000, do_ping),
     lager:debug("[MDNS Client:~p] Initialization started.",
                 [Name]),
-    Timeout = case application:get_env(recv_timeout) of
-                  {ok, T} ->
-                      T;
-                  _ ->
-                      1500
-              end,
     case gen_tcp:connect(IP, Port,
                          [binary, {active,false}, {packet,4}],
-                         Timeout) of
+                         250) of
         {ok, Socket} ->
             lager:debug("[MDNS Client:~p] Initialization successful.",
                         [Name]),
 
             {ok, #state{name=Name, socket=Socket, master=Master, ip=IP,
-                        port=Port, timeout=Timeout}};
+                        port=Port}};
         E ->
             lager:error("[MDNS Client:~p] Initialization failed: ~p.",
                         [Name, E]),
             reconnect(self()),
-            {ok, #state{name=Name, master=Master, ip=IP, port=Port,
-                        timeout=Timeout}}
+            {ok, #state{name=Name, master=Master, ip=IP, port=Port}}
     end.
 
-handle_call({call, Command}, _From,
-            #state{socket=Socket, master=Master, ip=IP, port=Port,
-                   timeout=Timeout}=State) ->
+handle_call({call, Command, Timeout}, _From,
+            #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     case gen_tcp:send(Socket, term_to_binary(Command)) of
         ok ->
             case gen_tcp:recv(Socket, 0, Timeout) of

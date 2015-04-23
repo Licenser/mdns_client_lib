@@ -13,6 +13,7 @@
 %% API
 -export([
          call/4,
+         call/5,
          cast/3,
          sure_cast/3,
          start_link/5
@@ -34,7 +35,7 @@
 
 -define(SERVER, ?MODULE).
 -record(state, {service, handler, command, from, socket, type, retry = 0,
-                worker, max_retries, retry_delay}).
+                worker, max_retries, retry_delay, timeout}).
 
 %%%===================================================================
 %%% API
@@ -58,25 +59,38 @@ start_link(Service, Handler, Command, From, Type) ->
                        []).
 
 call(Service, Handler, Command, From) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, call]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, undefined, call]).
+
+call(Service, Handler, Command, From, Timeout) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, Timeout, call]).
 
 sure_cast(Service, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, sure_cast]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, undefined, sure_cast]).
 
 cast(Service, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, cast]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, undefined, cast]).
 
 
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
 
-init([Service, Handler, Command, From, Type]) ->
+init([Service, Handler, Command, From, InTimeout, Type]) ->
     process_flag(trap_exit, true),
     random:seed(now()),
     {ok, Retries} = application:get_env(max_retries),
     {ok, RetryDelay} = application:get_env(retry_delay),
+    Timeout = case {InTimeout, application:get_env(recv_timeout)} of
+                  {undefined, {ok, T}} ->
+                      T;
+                  {undefined, _} ->
+                      1500;
+                  {V, _} ->
+                      V
+              end,
+
     {ok, get_worker, #state{
+                        timeout = Timeout,
                         max_retries = Retries,
                         retry_delay = RetryDelay,
                         service = Service,
@@ -130,12 +144,14 @@ test_worker(_, #state{worker = Worker, service=Service} = State) ->
             {next_state, get_worker, State, 0}
     end.
 
-do(_, #state{from = undefined, command = Command, worker = Worker} = State) ->
-    gen_server:call(Worker, {call, Command}),
+do(_, #state{from = undefined, command = Command, worker = Worker,
+             timeout = Timeout} = State) ->
+    gen_server:call(Worker, {call, Command, Timeout}),
     {stop, normal, State};
 
-do(_, #state{from = From, command = Command, worker = Worker} = State) ->
-    case gen_server:call(Worker, {call, Command}) of
+do(_, #state{from = From, command = Command, worker = Worker,
+             timeout = Timeout} = State) ->
+    case gen_server:call(Worker, {call, Command, Timeout}) of
         {ok, Res} ->
             gen_server:reply(From, binary_to_term(Res)),
             {stop, normal, State};

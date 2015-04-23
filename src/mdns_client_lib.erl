@@ -3,6 +3,7 @@
 -export([start/0,
          instance/1,
          call/2,
+         call/3,
          cast/2,
          sure_cast/2,
          servers/1
@@ -44,6 +45,9 @@ instance(Service) ->
                   {reply, Reply::term()}.
 call(Pid, Msg) ->
     mdns_client_lib_server:call(Pid, Msg).
+
+call(Pid, Msg, Timeout) ->
+    mdns_client_lib_server:call(Pid, Msg, Timeout).
 
 %%--------------------------------------------------------------------
 %% @doc

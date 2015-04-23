@@ -13,6 +13,7 @@
 %% API
 -export([start_link/1,
          call/2,
+         call/3,
          cast/2,
          sure_cast/2,
          add_endpoint/3,
@@ -80,6 +81,14 @@ servers(Pid) ->
                   noreply.
 call(Pid, Message) ->
     gen_server:call(Pid, {call, Message}).
+
+-spec call(pid(), Message::term(), Timeout :: pos_integer() | infinity) ->
+                  pong |
+                  {error, no_servers} |
+                  {reply, Reply::term()} |
+                  noreply.
+call(Pid, Message, Timeout) ->
+    gen_server:cast(Pid, {call, Message, Timeout}).
 
 -spec cast(pid(), Message::term()) ->
                   ok.
@@ -177,6 +186,10 @@ handle_call({call, _Message}, _From, #state{servers = []} = State) ->
 
 handle_call({call, Message}, From, State = #state{service = Service}) ->
     mdns_client_lib_call_fsm:call(Service, self(), Message, From),
+    {noreply, State};
+
+handle_call({call, Message, Timeout}, From, State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:call(Service, self(), Message, From, Timeout),
     {noreply, State};
 
 handle_call(_Request, _From, State) ->
