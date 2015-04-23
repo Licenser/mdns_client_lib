@@ -127,7 +127,7 @@ get_worker(_, State = #state{service=Service, worker = Worker}) ->
     {next_state, get_worker, State#state{worker = undefined}, 0}.
 
 test_worker(_, #state{worker = Worker, service=Service} = State) ->
-    case gen_server:call(Worker, {call, ping}) of
+    case gen_server:call(Worker, {call, ping, 500}) of
         {ok, Res} ->
             case binary_to_term(Res) of
                 pong ->

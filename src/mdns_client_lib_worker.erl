@@ -52,10 +52,7 @@ handle_call({call, Command, Timeout}, _From,
                         [Master, IP, Port, E]),
             reconnect(self()),
             {reply, E, State}
-    end;
-
-handle_call(_Request, _From, State) ->
-    {reply, ok, State}.
+    end.
 
 handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
                                       ip = IP, port = Port}) ->
@@ -70,10 +67,7 @@ handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
             mdns_client_lib_server:downvote_endpoint(Master, Name, 3),
             reconnect(self()),
             {noreply, State}
-    end;
-
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+    end.
 
 handle_info(ping,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
