@@ -16,7 +16,7 @@
          call/5,
          cast/3,
          sure_cast/3,
-         start_link/5
+         start_link/6
         ]).
 
 %% gen_fsm callbacks
@@ -53,9 +53,9 @@
 %% @end
 %%--------------------------------------------------------------------
 
-start_link(Service, Handler, Command, From, Type) ->
+start_link(Service, Handler, Command, From, Timeout, Type) ->
     gen_fsm:start_link(?MODULE,
-                       [list_to_atom(Service), Handler, Command, From, Type],
+                       [list_to_atom(Service), Handler, Command, From, Timeout, Type],
                        []).
 
 call(Service, Handler, Command, From) ->
