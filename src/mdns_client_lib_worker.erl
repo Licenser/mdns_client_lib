@@ -74,7 +74,7 @@ handle_info(do_ping,
     Pong = term_to_binary(pong),
     case gen_tcp:send(Socket, term_to_binary(ping)) of
         ok ->
-            case gen_tcp:recv(Socket, 0, 100) of
+            case gen_tcp:recv(Socket, 0, 500) of
                 {error, E} ->
                     lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p",
                                 [Master, IP, Port, E]),
