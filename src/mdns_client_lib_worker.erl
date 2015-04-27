@@ -40,8 +40,8 @@ handle_call({call, Command, Timeout}, _From,
         ok ->
             case gen_tcp:recv(Socket, 0, Timeout) of
                 {error, E} ->
-                    lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p",
-                                [Master, IP, Port, E]),
+                    lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p for ~p",
+                                [Master, IP, Port, E, Command]),
                     reconnect(self()),
                     {reply, {error, E}, State};
                 Res ->
