@@ -15,7 +15,7 @@ start_link(Name, IP, Port, Master) ->
 
 init([Name, IP, Port, Master]) ->
     process_flag(trap_exit, true),
-    timer:send_interval(1000, do_ping),
+    %%timer:send_interval(1000, do_ping),
     lager:debug("[MDNS Client:~p] Initialization started.",
                 [Name]),
     case gen_tcp:connect(IP, Port,
