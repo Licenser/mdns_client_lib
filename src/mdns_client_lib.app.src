@@ -5,9 +5,10 @@
   {applications, [
                   kernel,
                   crypto,
-                  stdlib
+                  stdlib,
+                  pooler,
+                  mdns_client
                  ]},
-  {included_applications, [pooler]},
   {mod, { mdns_client_lib_app, []}},
   {env, [{domain, ".local"},
          {interface, {0,0,0,0}},
