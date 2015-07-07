@@ -6,10 +6,9 @@
                   kernel,
                   crypto,
                   stdlib,
-                  pooler,
-                  mdns_client
+                  pooler
                  ]},
-  {mod, { mdns_client_lib_app, []}},
+  {mod, { mdns_client_lib_app, [mdns_client]}},
   {env, [{domain, ".local"},
          {interface, {0,0,0,0}},
          {port, 5353},
