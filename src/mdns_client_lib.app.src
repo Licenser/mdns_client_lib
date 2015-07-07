@@ -2,6 +2,7 @@
  [{description, ""},
   {vsn, "0.1.20"},
   {registered, []},
+  {included_applications, [mdns_client]},
   {applications, [
                   kernel,
                   crypto,
@@ -9,7 +10,7 @@
                   pooler
 
                  ]},
-  {mod, { mdns_client_lib_app, [mdns_client]}},
+  {mod, { mdns_client_lib_app, []}},
   {env, [{domain, ".local"},
          {interface, {0,0,0,0}},
          {port, 5353},
