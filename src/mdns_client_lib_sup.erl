@@ -23,6 +23,4 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    PoolerSup = {pooler_sup, {pooler_sup, start_link, []},
-                 permanent, infinity, supervisor, [pooler_sup]},
-    {ok, {{one_for_one, 1000, 3600}, [?CHILD(mdns_client_lib_instance_sup, supervisor), PoolerSup]}}.
+    {ok, {{one_for_one, 1000, 3600}, [?CHILD(mdns_client_lib_instance_sup, supervisor)]}}.
