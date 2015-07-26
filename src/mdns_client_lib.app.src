@@ -21,5 +21,8 @@
          {max_downvotes, 5},
          {pool_max, 5},
          {retry_delay, 150},
-         {pool_initial, 2}]}
- ]}.
+         {pool_initial, 2}]},
+  {contributors,["Heinz N. Gies"]},
+  {licenses,["CDDL"]},
+  {links,[{"Github",
+           "https://github.com/Licenser/mdns_client_lib"}]}]}.
