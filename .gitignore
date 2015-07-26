@@ -7,3 +7,4 @@ doc/*.html
 doc/*.png
 doc/*.css
 doc/edoc-info
+_build
