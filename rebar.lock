@@ -8,7 +8,7 @@
   0},
  {<<"mdns_client">>,
   {git,"https://github.com/Licenser/erlang-mdns-client.git",
-       {ref,"b33c9621234d690b74c9694acc66f1ddb6a77d65"}},
+       {ref,"20df5727fa04c2eb1f8ec89f65ed0b43e0f29d2b"}},
   0},
  {<<"lager">>,
   {git,"git://github.com/basho/lager",
