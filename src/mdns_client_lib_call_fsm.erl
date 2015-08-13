@@ -77,7 +77,10 @@ cast(Service, Handler, Command) ->
 
 init([Service, Handler, Command, From, InTimeout, Type]) ->
     process_flag(trap_exit, true),
-    random:seed(now()),
+    random:seed(erlang:phash2([node()]),
+                erlang:monotonic_time(),
+                erlang:unique_integer()),
+
     {ok, Retries} = application:get_env(max_retries),
     {ok, RetryDelay} = application:get_env(retry_delay),
     Timeout = case {InTimeout, application:get_env(recv_timeout)} of
