@@ -1,6 +1,6 @@
 {application,mdns_client_lib,
              [{description,[]},
-              {vsn,"0.1.27"},
+              {vsn,"0.1.28"},
               {registered,[]},
               {included_applications,[mdns_client]},
               {applications,[kernel,crypto,stdlib,pooler]},
