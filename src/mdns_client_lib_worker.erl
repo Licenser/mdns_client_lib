@@ -34,9 +34,21 @@ init([Name, IP, Port, Master]) ->
             {ok, #state{name=Name, master=Master, ip=IP, port=Port}}
     end.
 
+cmd_bin(Command) ->
+    case seq_trace:get_token() of
+        [] ->
+            term_to_binary(Command);
+        _Tkn ->
+            {serial, {Previous, Current}} = seq_trace:get_token(serial),
+            %% Since we got thos over TCP we need to 'update' the serial ourselfs
+            seq_trace:get_token(serial, {Previous, Current + 1}),
+            Tkn = seq_trace:get_token(),
+            term_to_binary({trace, Tkn, Command})
+    end.
+
 handle_call({call, Command, Timeout}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
-    case gen_tcp:send(Socket, term_to_binary(Command)) of
+    case gen_tcp:send(Socket, cmd_bin(Command)) of
         ok ->
             case gen_tcp:recv(Socket, 0, Timeout) of
                 {error, E} ->

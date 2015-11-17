@@ -35,7 +35,7 @@
 
 -define(SERVER, ?MODULE).
 -record(state, {service, handler, command, from, socket, type, retry = 0,
-                worker, max_retries, retry_delay, timeout}).
+                worker, max_retries, retry_delay, timeout, seq_token}).
 
 %%%===================================================================
 %%% API
@@ -53,29 +53,31 @@
 %% @end
 %%--------------------------------------------------------------------
 
-start_link(Service, Handler, Command, From, Timeout, Type) ->
+start_link(Service, Handler, SeqToken, Command, From, Timeout, Type) ->
     gen_fsm:start_link(?MODULE,
-                       [list_to_atom(Service), Handler, Command, From, Timeout, Type],
+                       [list_to_atom(Service), Handler, SeqToken, Command, From, Timeout, Type],
                        []).
 
-call(Service, Handler, Command, From) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, undefined, call]).
+call(Service, Handler, SeqToken, Command, From) ->
+    supervisor:start_child(
+      mdns_client_lib_call_fsm_sup,
+      [Service, Handler, SeqToken, Command, From, undefined, call]).
 
-call(Service, Handler, Command, From, Timeout) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, Timeout, call]).
+call(Service, Handler, SeqToken, Command, From, Timeout) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, SeqToken, Command, From, Timeout, call]).
 
-sure_cast(Service, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, undefined, sure_cast]).
+sure_cast(Service, SeqToken, Handler, Command) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, SeqToken, Command, undefined, undefined, sure_cast]).
 
-cast(Service, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, undefined, cast]).
+cast(Service, Handler, SeqToken, Command) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, SeqToken, Command, undefined, undefined, cast]).
 
 
 %%%===================================================================
 %%% gen_fsm callbacks
 %%%===================================================================
 
-init([Service, Handler, Command, From, InTimeout, Type]) ->
+init([Service, Handler, SeqToken, Command, From, InTimeout, Type]) ->
     process_flag(trap_exit, true),
     random:seed(erlang:phash2([node()]),
                 erlang:monotonic_time(),
@@ -100,7 +102,8 @@ init([Service, Handler, Command, From, InTimeout, Type]) ->
                         command = Command,
                         handler = Handler,
                         type = Type,
-                        from = From
+                        from = From,
+                        seq_token = SeqToken
                        }, 0}.
 
 

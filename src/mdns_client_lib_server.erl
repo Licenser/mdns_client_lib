@@ -80,7 +80,7 @@ servers(Pid) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message) ->
-    gen_server:call(Pid, {call, Message}).
+    gen_server:call(Pid, {call, seq_trace:ge_token(), Message}).
 
 -spec call(pid(), Message::term(), Timeout :: pos_integer() | infinity) ->
                   pong |
@@ -88,19 +88,19 @@ call(Pid, Message) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message, Timeout) ->
-    gen_server:call(Pid, {call, Message, Timeout}).
+    gen_server:call(Pid, {call, seq_trace:ge_token(), Message, Timeout}).
 
 -spec cast(pid(), Message::term()) ->
                   ok.
 
 cast(Pid, Message) ->
-    gen_server:cast(Pid, {cast, Message}).
+    gen_server:cast(Pid, {cast, seq_trace:ge_token(), Message}).
 
 -spec sure_cast(pid(), Message::term()) ->
                        ok.
 
 sure_cast(Pid, Message) ->
-    gen_server:cast(Pid, {sure_cast, Message}).
+    gen_server:cast(Pid, {sure_cast, seq_trace:ge_token(), Message}).
 
 -spec get_server(pid()) ->
                         {ok, mdns_server()} |
@@ -181,15 +181,15 @@ handle_call(service, _From, State = #state{service = Service}) ->
 handle_call(servers, _From, #state{servers = Servers} = State) ->
     {reply, Servers, State};
 
-handle_call({call, _Message}, _From, #state{servers = []} = State) ->
+handle_call({call, _SeqToken, _Message}, _From, #state{servers = []} = State) ->
     {reply, {error, no_servers}, State};
 
-handle_call({call, Message}, From, State = #state{service = Service}) ->
-    mdns_client_lib_call_fsm:call(Service, self(), Message, From),
+handle_call({call, SeqToken, Message}, From, State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:call(Service, self(), SeqToken, Message, From),
     {noreply, State};
 
-handle_call({call, Message, Timeout}, From, State = #state{service = Service}) ->
-    mdns_client_lib_call_fsm:call(Service, self(), Message, From, Timeout),
+handle_call({call, SeqToken, Message, Timeout}, From, State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:call(Service, self(), SeqToken, Message, From, Timeout),
     {noreply, State};
 
 handle_call(_Request, _From, State) ->
@@ -266,15 +266,15 @@ handle_cast({add, Server, Options},
             {noreply, State#state{servers=S1}}
     end;
 
-handle_cast({cast, _Message}, #state{servers = []} = State) ->
+handle_cast({cast, _SeqToken, _Message}, #state{servers = []} = State) ->
     {noreply, State};
 
-handle_cast({cast, Message}, #state{service = Service} = State) ->
-    mdns_client_lib_call_fsm:cast(Service, self(), Message),
+handle_cast({cast, SeqToken, Message}, #state{service = Service} = State) ->
+    mdns_client_lib_call_fsm:cast(Service, self(), SeqToken, Message),
     {noreply, State};
 
-handle_cast({sure_cast, Message}, #state{service = Service} = State) ->
-    mdns_client_lib_call_fsm:sure_cast(Service, self(), Message),
+handle_cast({sure_cast, SeqToken, Message}, #state{service = Service} = State) ->
+    mdns_client_lib_call_fsm:sure_cast(Service, self(), SeqToken, Message),
     {noreply, State};
 
 handle_cast({downvote, BadName, Amount}, #state{service = Service,

@@ -1,68 +1,23 @@
-REBAR = $(shell pwd)/rebar
-
-.PHONY: deps rel package
-
-all: deps compile
+REBAR = rebar3
 
 compile:
 	$(REBAR) compile
 
-deps:
-	$(REBAR) get-deps
-
 clean:
 	$(REBAR) clean
 
-distclean: clean
-	$(REBAR) delete-deps
-
 test:
-	$(REBAR) skip_deps=true eunit
+	$(REBAR) eunit
 
 ###
 ### Docs
 ###
 docs:
-	$(REBAR) skip_deps=true doc
+	$(REBAR) doc
 
 ##
 ## Developer targets
 ##
 
 xref:
-	$(REBAR) xref skip_deps=true
-
-
-##
-## Dialyzer
-##
-APPS = kernel stdlib sasl erts ssl tools os_mon runtime_tools crypto inets \
-	xmerl webtool snmp public_key mnesia eunit syntax_tools compiler
-COMBO_PLT = $(HOME)/.mdns_client_lib_combo_dialyzer_plt
-
-DIALYZER_IGNORE="^\(eunit_test.erl\)"
-
-check_plt: deps compile
-	dialyzer --check_plt --plt $(COMBO_PLT) --apps $(APPS) \
-		deps/*/ebin ebin
-
-build_plt: deps compile
-	dialyzer --build_plt --output_plt $(COMBO_PLT) --apps $(APPS) \
-		deps/*/ebin ebin
-
-dialyzer: deps compile
-	@echo
-	@echo Use "'make check_plt'" to check PLT prior to using this target.
-	@echo Use "'make build_plt'" to build PLT prior to using this target.
-	@echo
-	@sleep 1
-	dialyzer -Wno_return --plt $(COMBO_PLT) deps/*/ebin ebin | grep -v $(DIALYZER_IGNORE)
-
-
-cleanplt:
-	@echo
-	@echo "Are you sure?  It takes about 1/2 hour to re-build."
-	@echo Deleting $(COMBO_PLT) in 5 seconds.
-	@echo
-	sleep 5
-	rm $(COMBO_PLT)
+	$(REBAR) xref
