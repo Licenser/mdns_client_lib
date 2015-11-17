@@ -1,5 +1,5 @@
 {application,mdns_client_lib,
-             [{description,[]},
+             [{description, "client lib for mdns aware tcp servers"},
               {vsn,"0.1.29"},
               {registered,[]},
               {included_applications,[mdns_client]},
@@ -16,7 +16,7 @@
                     {pool_max,5},
                     {retry_delay,150},
                     {pool_initial,2}]},
-              {contributors,["Heinz N. Gies"]},
+              {maintainers,["Heinz N. Gies"]},
               {licenses,["CDDL"]},
               {links,[{"Github",
                        "https://github.com/Licenser/mdns_client_lib"}]}]}.
