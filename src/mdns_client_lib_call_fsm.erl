@@ -55,8 +55,8 @@
 
 start_link(Service, Handler, Command, From, Timeout, Type) ->
     gen_fsm:start_link(?MODULE,
-                       [list_to_atom(Service), Handler, Command, From, Timeout, Type],
-                       []).
+                       [list_to_atom(Service), Handler, Command,
+                        From, Timeout, Type], []).
 
 call(Service, Handler, Command, From) ->
     supervisor:start_child(
@@ -64,13 +64,18 @@ call(Service, Handler, Command, From) ->
       [Service, Handler, Command, From, undefined, call]).
 
 call(Service, Handler, Command, From, Timeout) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, From, Timeout, call]).
+    supervisor:start_child(mdns_client_lib_call_fsm_sup,
+                           [Service, Handler, Command, From, Timeout, call]).
 
 sure_cast(Service, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, undefined, sure_cast]).
+    supervisor:start_child(
+      mdns_client_lib_call_fsm_sup,
+      [Service, Handler, Command, undefined, undefined, sure_cast]).
 
 cast(Service, Handler, Command) ->
-    supervisor:start_child(mdns_client_lib_call_fsm_sup, [Service, Handler, Command, undefined, undefined, cast]).
+    supervisor:start_child(
+      mdns_client_lib_call_fsm_sup,
+      [Service, Handler, Command, undefined, undefined, cast]).
 
 
 %%%===================================================================
@@ -123,7 +128,8 @@ get_worker(_, State = #state{service=Service, retry=Retry,
             {next_state, get_worker, State#state{retry = Retry + 1},
              random:uniform(Deleay)};
         Worker ->
-            {next_state, test_worker, State#state{worker = Worker, retry = Retry + 1}, 0}
+            {next_state, test_worker,
+             State#state{worker = Worker, retry = Retry + 1}, 0}
     end;
 
 get_worker(_, State = #state{service=Service, worker = Worker}) ->

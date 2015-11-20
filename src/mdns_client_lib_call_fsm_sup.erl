@@ -53,7 +53,8 @@ start_link() ->
 %%--------------------------------------------------------------------
 
 init([]) ->
-    {ok, {{simple_one_for_one, 5, 10}, [?CHILD(mdns_client_lib_call_fsm, worker)]}}.
+    {ok, {{simple_one_for_one, 5, 10},
+          [?CHILD(mdns_client_lib_call_fsm, worker)]}}.
 
 %%%===================================================================
 %%% Internal functions

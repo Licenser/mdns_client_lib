@@ -19,9 +19,9 @@
 %% @end
 %%--------------------------------------------------------------------
 
--spec instance(Service::string()) -> {'error',_} |
-                                     {'ok','undefined' | pid()} |
-                                     {'ok','undefined' | pid(),_}.
+-spec instance(Service::string()) -> {'error', _} |
+                                     {'ok', 'undefined' | pid()} |
+                                     {'ok', 'undefined' | pid(), _}.
 instance(Service) ->
     supervisor:start_child(mdns_client_lib_instance_sup, [Service]).
 
@@ -41,7 +41,7 @@ instance(Service) ->
 -spec call(Pid::pid(), Msg::term()) ->
                   noreply |
                   pong |
-                  {error,no_servers} |
+                  {error, no_servers} |
                   {reply, Reply::term()}.
 call(Pid, Msg) ->
     mdns_client_lib_server:call(Pid, Msg).

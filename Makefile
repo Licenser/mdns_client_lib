@@ -1,23 +1,13 @@
 REBAR = rebar3
 
-compile:
-	$(REBAR) compile
+.PHONY: all test
+
+all: compile
+
+include fifo.mk
 
 clean:
 	$(REBAR) clean
 
-test:
+eunit:
 	$(REBAR) eunit
-
-###
-### Docs
-###
-docs:
-	$(REBAR) doc
-
-##
-## Developer targets
-##
-
-xref:
-	$(REBAR) xref

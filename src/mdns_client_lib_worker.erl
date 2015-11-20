@@ -5,7 +5,7 @@
          code_change/3]).
 
 -record(state, {name, socket, master, ip, port}).
-
+-define(OPTS, [binary, {active, false}, {packet, 4}]).
 
 reconnect(Pid) ->
     gen_server:cast(Pid, reconnect).
@@ -19,12 +19,11 @@ init([Name, IP, Port, Master]) ->
     lager:debug("[MDNS Client:~p] Initialization started.",
                 [Name]),
     case gen_tcp:connect(IP, Port,
-                         [binary, {active,false}, {packet,4}],
+                         ?OPTS,
                          250) of
         {ok, Socket} ->
             lager:debug("[MDNS Client:~p] Initialization successful.",
                         [Name]),
-
             {ok, #state{name=Name, socket=Socket, master=Master, ip=IP,
                         port=Port}};
         E ->
@@ -34,35 +33,19 @@ init([Name, IP, Port, Master]) ->
             {ok, #state{name=Name, master=Master, ip=IP, port=Port}}
     end.
 
-cmd_bin(Command) ->
-    case seq_trace:get_token() of
-        [] ->
-            term_to_binary(Command);
-        _Tkn ->
-            {serial, {Previous, Current}} = seq_trace:get_token(serial),
-            %% Since we got thos over TCP we need to 'update' the serial ourselfs
-            seq_trace:get_token(serial, {Previous, Current + 1}),
-            Tkn = seq_trace:get_token(),
-            term_to_binary({trace, Tkn, Command})
-    end.
-
 handle_call({call, Command, Timeout}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     case gen_tcp:send(Socket, cmd_bin(Command)) of
         ok ->
             case gen_tcp:recv(Socket, 0, Timeout) of
                 {error, E} ->
-                    lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p for ~p",
-                                [Master, IP, Port, E, Command]),
-                    reconnect(self()),
+                    error_and_reconnect(recv, Master, IP, Port, E),
                     {reply, {error, E}, State};
                 Res ->
                     {reply, Res, State}
             end;
         E ->
-            lager:error("[MDNS Client:~p] send error on ~p:~p: ~p",
-                        [Master, IP, Port, E]),
-            reconnect(self()),
+            error_and_reconnect(send, Master, IP, Port, E),
             {reply, E, State}
     end.
 
@@ -70,7 +53,7 @@ handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
                                       ip = IP, port = Port}) ->
     mdns_client_lib_server:downvote_endpoint(Master, Name),
     gen_tcp:close(S0),
-    case gen_tcp:connect(IP, Port, [binary, {active,false}, {packet,4}], 250) of
+    case gen_tcp:connect(IP, Port, ?OPTS, 250) of
         {ok, Socket} ->
             {noreply, State#state{socket = Socket}};
         E ->
@@ -88,17 +71,13 @@ handle_info(do_ping,
         ok ->
             case gen_tcp:recv(Socket, 0, 500) of
                 {error, E} ->
-                    lager:error("[MDNS Client:~p] recv error on ~p:~p: ~p",
-                                [Master, IP, Port, E]),
-                    reconnect(self()),
+                    error_and_reconnect(recv, Master, IP, Port, E),
                     {noreply, State};
                 {ok, Res} when Res =:= Pong  ->
                     {noreply, State}
             end;
         E ->
-            lager:error("[MDNS Client:~p] send error on ~p:~p: ~p",
-                        [Master, IP, Port, E]),
-            reconnect(self()),
+            error_and_reconnect(send, Master, IP, Port, E),
             {noreply, State}
     end;
 
@@ -116,3 +95,21 @@ terminate(Reason, #state{name = Name, socket=Socket}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+error_and_reconnect(Type, Master, IP, Port, E) ->
+    lager:error("[MDNS Client:~p] ~s error on ~p:~p: ~p",
+                [Type, Master, IP, Port, E]),
+    reconnect(self()).
+
+cmd_bin(Command) ->
+    case seq_trace:get_token() of
+        [] ->
+            term_to_binary(Command);
+        _Tkn ->
+            {serial, {Previous, Current}} = seq_trace:get_token(serial),
+            %% Since we got thos over TCP we need to 'update' the serial
+            %% ourselfs
+            seq_trace:set_token(serial, {Previous, Current + 1}),
+            Tkn = seq_trace:get_token(),
+            term_to_binary({trace, Tkn, Command})
+    end.

@@ -80,7 +80,7 @@ servers(Pid) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message) ->
-    gen_server:call(Pid, {call, seq_trace:get_token(), Message}).
+    gen_server:call(Pid, {call, Message}).
 
 -spec call(pid(), Message::term(), Timeout :: pos_integer() | infinity) ->
                   pong |
@@ -88,19 +88,19 @@ call(Pid, Message) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message, Timeout) ->
-    gen_server:call(Pid, {call, seq_trace:get_token(), Message, Timeout}).
+    gen_server:call(Pid, {call, Message, Timeout}).
 
 -spec cast(pid(), Message::term()) ->
                   ok.
 
 cast(Pid, Message) ->
-    gen_server:cast(Pid, {cast, seq_trace:get_token(), Message}).
+    gen_server:cast(Pid, {cast, Message}).
 
 -spec sure_cast(pid(), Message::term()) ->
                        ok.
 
 sure_cast(Pid, Message) ->
-    gen_server:cast(Pid, {sure_cast, seq_trace:get_token(), Message}).
+    gen_server:cast(Pid, {sure_cast, Message}).
 
 -spec get_server(pid()) ->
                         {ok, mdns_server()} |
@@ -167,7 +167,7 @@ handle_call(get_server, _From, State = #state{servers = []}) ->
     {reply, {error, no_servers}, State};
 handle_call(get_server, _From, State = #state{servers = Servers}) ->
     N = length(Servers),
-    {{_, Options},_,_} = lists:nth(random:uniform(N), Servers),
+    {{_, Options}, _, _} = lists:nth(random:uniform(N), Servers),
     {port, PortB} = lists:keyfind(port, 1, Options),
     {ip, IPB} = lists:keyfind(ip, 1, Options),
     {reply,
@@ -181,15 +181,18 @@ handle_call(service, _From, State = #state{service = Service}) ->
 handle_call(servers, _From, #state{servers = Servers} = State) ->
     {reply, Servers, State};
 
-handle_call({call, _SeqToken, _Message}, _From, #state{servers = []} = State) ->
+handle_call({call, _Message}, _From,
+            State = #state{servers = []}) ->
     {reply, {error, no_servers}, State};
 
-handle_call({call, SeqToken, Message}, From, State = #state{service = Service}) ->
-    mdns_client_lib_call_fsm:call(Service, self(), SeqToken, Message, From),
+handle_call({call, Message}, From,
+            State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:call(Service, self(), Message, From),
     {noreply, State};
 
-handle_call({call, SeqToken, Message, Timeout}, From, State = #state{service = Service}) ->
-    mdns_client_lib_call_fsm:call(Service, self(), SeqToken, Message, From, Timeout),
+handle_call({call, Message, Timeout}, From,
+            State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:call(Service, self(), Message, From, Timeout),
     {noreply, State};
 
 handle_call(_Request, _From, State) ->
@@ -244,13 +247,15 @@ handle_cast({add, Server, Options},
                         [Service, Name]),
             case Servers of
                 [] ->
-                    lager:debug("[mdns_client_lib:~s] First endpoint.", [Service]),
+                    lager:debug("[mdns_client_lib:~s] First endpoint.",
+                                [Service]),
                     mdns_client_lib_connection_event:notify_connect(Service);
                 _ ->
                     ok
             end,
             addpool(Service, Name, IPS, IPort),
-            {noreply, State#state{servers=[{{Server, Options}, Name, 0} | Servers]}};
+            {noreply,
+             State#state{servers=[{{Server, Options}, Name, 0} | Servers]}};
         _ ->
             S1 = [case S of
                       {Opts, N, 0} when N =:= Name ->
@@ -266,20 +271,22 @@ handle_cast({add, Server, Options},
             {noreply, State#state{servers=S1}}
     end;
 
-handle_cast({cast, _SeqToken, _Message}, #state{servers = []} = State) ->
+handle_cast({cast, _Message}, #state{servers = []} = State) ->
     {noreply, State};
 
-handle_cast({cast, SeqToken, Message}, #state{service = Service} = State) ->
-    mdns_client_lib_call_fsm:cast(Service, self(), SeqToken, Message),
+handle_cast({cast, Message}, #state{service = Service} = State) ->
+    mdns_client_lib_call_fsm:cast(Service, self(), Message),
     {noreply, State};
 
-handle_cast({sure_cast, SeqToken, Message}, #state{service = Service} = State) ->
-    mdns_client_lib_call_fsm:sure_cast(Service, self(), SeqToken, Message),
+handle_cast({sure_cast, Message},
+            #state{service = Service} = State) ->
+    mdns_client_lib_call_fsm:sure_cast(Service, self(), Message),
     {noreply, State};
 
-handle_cast({downvote, BadName, Amount}, #state{service = Service,
-                                                servers = Servers,
-                                                max_downvotes = MaxDVs} = State) ->
+handle_cast({downvote, BadName, Amount},
+            #state{service = Service,
+                   servers = Servers,
+                   max_downvotes = MaxDVs} = State) ->
     S1 = [case S of
               {Opts, Name, Cnt} when
                     Name =:= BadName,
@@ -308,8 +315,8 @@ handle_cast({remove, BadID}, #state{service = Service,
          lager:warning("[mdns_client_lib:~s/~s] Removing endpoint by force.",
                        [Service, Pool]),
          pooler:rm_pool(Pool)
-     end || {_ID, Pool, _} <- Servers, _ID =:= BadID],
-    S2 = [S || S = {_ID,_ ,_} <- Servers, _ID =/= BadID],
+     end || {ID, Pool, _} <- Servers, ID =:= BadID],
+    S2 = [S || S = {ID, _, _} <- Servers, ID =/= BadID],
     {noreply, State#state{servers = S2}};
 
 handle_cast(_Msg, State) ->
@@ -340,7 +347,7 @@ handle_info(_Info, State) ->
 %% @end
 %%--------------------------------------------------------------------
 terminate(_Reason, #state{servers = Servers}) ->
-    [pooler:rm_pool(Name) || {_, Name,_} <- Servers],
+    [pooler:rm_pool(Name) || {_, Name, _} <- Servers],
     ok.
 
 %%--------------------------------------------------------------------

@@ -23,4 +23,5 @@ start_link() ->
 %% ===================================================================
 
 init([]) ->
-    {ok, {{one_for_one, 1000, 3600}, [?CHILD(mdns_client_lib_instance_sup, supervisor)]}}.
+    {ok, {{one_for_one, 1000, 3600},
+          [?CHILD(mdns_client_lib_instance_sup, supervisor)]}}.
