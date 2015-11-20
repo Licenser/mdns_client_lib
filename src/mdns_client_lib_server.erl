@@ -80,7 +80,7 @@ servers(Pid) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message) ->
-    gen_server:call(Pid, {call, seq_trace:ge_token(), Message}).
+    gen_server:call(Pid, {call, seq_trace:get_token(), Message}).
 
 -spec call(pid(), Message::term(), Timeout :: pos_integer() | infinity) ->
                   pong |
@@ -88,19 +88,19 @@ call(Pid, Message) ->
                   {reply, Reply::term()} |
                   noreply.
 call(Pid, Message, Timeout) ->
-    gen_server:call(Pid, {call, seq_trace:ge_token(), Message, Timeout}).
+    gen_server:call(Pid, {call, seq_trace:get_token(), Message, Timeout}).
 
 -spec cast(pid(), Message::term()) ->
                   ok.
 
 cast(Pid, Message) ->
-    gen_server:cast(Pid, {cast, seq_trace:ge_token(), Message}).
+    gen_server:cast(Pid, {cast, seq_trace:get_token(), Message}).
 
 -spec sure_cast(pid(), Message::term()) ->
                        ok.
 
 sure_cast(Pid, Message) ->
-    gen_server:cast(Pid, {sure_cast, seq_trace:ge_token(), Message}).
+    gen_server:cast(Pid, {sure_cast, seq_trace:get_token(), Message}).
 
 -spec get_server(pid()) ->
                         {ok, mdns_server()} |
