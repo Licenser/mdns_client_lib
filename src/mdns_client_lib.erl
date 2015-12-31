@@ -4,13 +4,15 @@
          instance/1,
          call/2,
          call/3,
-         stream/4,
+         stream/5,
          cast/2,
          sure_cast/2,
          servers/1
         ]).
 
--type stream_fun() :: fun(({stream, term} | done) ->  ok).
+-export_types([stream_fun/0]).
+
+-type stream_fun() :: fun(({stream, term} | done, Acc) ->  Acc).
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new instance of a mdns client library, this should
@@ -61,13 +63,13 @@ call(Pid, Msg, Timeout) ->
 %%--------------------------------------------------------------------
 
 -spec stream(Pid::pid(), Msg::term(), StreamFn :: stream_fun(),
-             Timeout :: pos_integer() | infinity) ->
+             Acc0 :: term(), Timeout :: pos_integer() | infinity) ->
                   noreply |
                   {error, no_servers} |
                   {reply, Reply::term()}.
 
-stream(Pid, Msg, StreamFn, Timeout) ->
-    mdns_client_lib_server:stream(Pid, Msg, StreamFn, Timeout).
+stream(Pid, Msg, StreamFn, Acc0, Timeout) ->
+    mdns_client_lib_server:stream(Pid, Msg, StreamFn, Acc0, Timeout).
 
 %%--------------------------------------------------------------------
 %% @doc

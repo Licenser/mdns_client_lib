@@ -33,11 +33,11 @@ init([Name, IP, Port, Master]) ->
             {ok, #state{name=Name, master=Master, ip=IP, port=Port}}
     end.
 
-handle_call({stream, Command, StreamFn, Timeout}, _From,
+handle_call({stream, Command, StreamFn, Acc0, Timeout}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     case gen_tcp:send(Socket, cmd_bin(Command)) of
         ok ->
-            read_stream(StreamFn, Timeout, State);
+            read_stream(StreamFn, Timeout, Acc0, State);
         E ->
             reply_and_reconnect(send, Master, IP, Port, E, State)
     end;
@@ -56,7 +56,7 @@ handle_call({call, Command, Timeout}, _From,
         E ->
             reply_and_reconnect(send, Master, IP, Port, E, State)
     end.
-read_stream(StreamFn, Timeout,
+read_stream(StreamFn, Timeout, Acc0,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     case gen_tcp:recv(Socket, 0, Timeout) of
         {error, E} ->
@@ -64,13 +64,13 @@ read_stream(StreamFn, Timeout,
         {ok, Res} ->
             case binary_to_term(Res) of
                 stream_start ->
-                    read_stream1(StreamFn, Timeout, State);
+                    read_stream1(StreamFn, Timeout, Acc0, State);
                 E ->
                     reply_and_reconnect(recv, Master, IP, Port, E, State)
             end
     end.
 
-read_stream1(StreamFn, Timeout,
+read_stream1(StreamFn, Timeout, AccIn,
              #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     case gen_tcp:recv(Socket, 0, Timeout) of
         {error, E} ->
@@ -78,11 +78,11 @@ read_stream1(StreamFn, Timeout,
         {ok, Res} ->
             case binary_to_term(Res) of
                 stream_end ->
-                    StreamFn(done),
-                    {reply, ok, State};
+                    AccOut = StreamFn(done, AccIn),
+                    {reply, AccOut, State};
                 {stream, Data} ->
-                    StreamFn({data, Data}),
-                    read_stream1(StreamFn, Timeout, State);
+                    AccOut = StreamFn({data, Data}, AccIn),
+                    read_stream1(StreamFn, Timeout, AccOut, State);
                 E ->
                     StreamFn({error, E}),
                     reply_and_reconnect(recv, Master, IP, Port, E, State)
