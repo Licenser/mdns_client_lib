@@ -16,6 +16,7 @@
          call/3,
          cast/2,
          sure_cast/2,
+         stream/4,
          add_endpoint/3,
          downvote_endpoint/2,
          downvote_endpoint/3,
@@ -102,9 +103,20 @@ cast(Pid, Message) ->
 sure_cast(Pid, Message) ->
     gen_server:cast(Pid, {sure_cast, Message}).
 
+-spec stream(pid(), Message::tuple(),
+             StreamFn :: fun((term()) -> _),
+             Timeout :: pos_integer() | infinity) ->
+    {ok, term()} |
+    {error, term()} |
+    {error, no_servers}.
+
+stream(Pid, Message, StreamFn, Timeout) ->
+    gen_server:call(Pid, {stream, Message, StreamFn, Timeout}).
+
 -spec get_server(pid()) ->
                         {ok, mdns_server()} |
                         {error, no_servers}.
+
 
 get_server(Pid) ->
     gen_server:call(Pid, get_server).
@@ -165,6 +177,7 @@ init([Service]) ->
 
 handle_call(get_server, _From, State = #state{servers = []}) ->
     {reply, {error, no_servers}, State};
+
 handle_call(get_server, _From, State = #state{servers = Servers}) ->
     N = length(Servers),
     {{_, Options}, _, _} = lists:nth(random:uniform(N), Servers),
@@ -193,6 +206,12 @@ handle_call({call, Message}, From,
 handle_call({call, Message, Timeout}, From,
             State = #state{service = Service}) ->
     mdns_client_lib_call_fsm:call(Service, self(), Message, From, Timeout),
+    {noreply, State};
+
+handle_call({stream, Message, StreamFn, Timeout}, From,
+            State = #state{service = Service}) ->
+    mdns_client_lib_call_fsm:stream(Service, self(), Message, From, StreamFn,
+                                    Timeout),
     {noreply, State};
 
 handle_call(_Request, _From, State) ->

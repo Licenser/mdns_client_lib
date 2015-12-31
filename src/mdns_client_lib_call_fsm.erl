@@ -14,6 +14,7 @@
 -export([
          call/4,
          call/5,
+         stream/6,
          cast/3,
          sure_cast/3,
          start_link/6
@@ -66,6 +67,11 @@ call(Service, Handler, Command, From) ->
 call(Service, Handler, Command, From, Timeout) ->
     supervisor:start_child(mdns_client_lib_call_fsm_sup,
                            [Service, Handler, Command, From, Timeout, call]).
+
+stream(Service, Handler, Command, From, StreamFn, Timeout) ->
+    supervisor:start_child(mdns_client_lib_call_fsm_sup,
+                           [Service, Handler, Command, From, Timeout,
+                            {stream, StreamFn}]).
 
 sure_cast(Service, Handler, Command) ->
     supervisor:start_child(
@@ -153,6 +159,16 @@ test_worker(_, #state{worker = Worker, service=Service} = State) ->
                           [Service, E]),
             {next_state, get_worker, State, 0}
     end.
+
+do(_, #state{from = From, command = Command, worker = Worker,
+             timeout = Timeout, type = {stream, StreamFn}} = State) ->
+    case gen_server:call(Worker, {stream, Command, StreamFn, Timeout}) of
+        {ok, Res} ->
+            gen_server:reply(From, binary_to_term(Res));
+        E ->
+            gen_server:reply(From, {error, E})
+    end,
+    {stop, normal, State};
 
 do(_, #state{from = undefined, command = Command, worker = Worker,
              timeout = Timeout} = State) ->

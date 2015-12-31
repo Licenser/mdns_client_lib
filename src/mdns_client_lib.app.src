@@ -1,6 +1,6 @@
 {application,mdns_client_lib,
              [{description,"client lib for mdns aware tcp servers"},
-              {vsn,"0.1.30"},
+              {vsn,"0.1.31"},
               {registered,[]},
               {included_applications,[mdns_client]},
               {applications,[kernel,crypto,stdlib,pooler]},

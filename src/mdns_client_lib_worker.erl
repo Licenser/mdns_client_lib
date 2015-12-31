@@ -33,21 +33,63 @@ init([Name, IP, Port, Master]) ->
             {ok, #state{name=Name, master=Master, ip=IP, port=Port}}
     end.
 
+handle_call({stream, Command, StreamFn, Timeout}, _From,
+            #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
+    case gen_tcp:send(Socket, cmd_bin(Command)) of
+        ok ->
+            read_stream(StreamFn, Timeout, State);
+        E ->
+            reply_and_reconnect(send, Master, IP, Port, E, State)
+    end;
+
 handle_call({call, Command, Timeout}, _From,
             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
     case gen_tcp:send(Socket, cmd_bin(Command)) of
         ok ->
             case gen_tcp:recv(Socket, 0, Timeout) of
                 {error, E} ->
-                    error_and_reconnect(recv, Master, IP, Port, E),
-                    {reply, {error, E}, State};
+                    reply_and_reconnect(recv, Master, IP, Port, {error, E},
+                                        State);
                 Res ->
                     {reply, Res, State}
             end;
         E ->
-            error_and_reconnect(send, Master, IP, Port, E),
-            {reply, E, State}
+            reply_and_reconnect(send, Master, IP, Port, E, State)
     end.
+read_stream(StreamFn, Timeout,
+            #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
+    case gen_tcp:recv(Socket, 0, Timeout) of
+        {error, E} ->
+            reply_and_reconnect(recv, Master, IP, Port, {error, E}, State);
+        {ok, Res} ->
+            case binary_to_term(Res) of
+                stream_start ->
+                    read_stream1(StreamFn, Timeout, State);
+                E ->
+                    reply_and_reconnect(recv, Master, IP, Port, E, State)
+            end
+    end.
+
+read_stream1(StreamFn, Timeout,
+             #state{socket=Socket, master=Master, ip=IP, port=Port}=State) ->
+    case gen_tcp:recv(Socket, 0, Timeout) of
+        {error, E} ->
+            reply_and_reconnect(recv, Master, IP, Port, E, State);
+        {ok, Res} ->
+            case binary_to_term(Res) of
+                stream_end ->
+                    StreamFn(done),
+                    {reply, ok, State};
+                {stream, Data} ->
+                    StreamFn({data, Data}),
+                    read_stream1(StreamFn, Timeout, State);
+                E ->
+                    StreamFn({error, E}),
+                    reply_and_reconnect(recv, Master, IP, Port, E, State)
+            end
+    end.
+
+
 
 handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
                                       ip = IP, port = Port}) ->
@@ -71,14 +113,12 @@ handle_info(do_ping,
         ok ->
             case gen_tcp:recv(Socket, 0, 500) of
                 {error, E} ->
-                    error_and_reconnect(recv, Master, IP, Port, E),
-                    {noreply, State};
+                    noreply_and_reconnect(recv, Master, IP, Port, E, State);
                 {ok, Res} when Res =:= Pong  ->
                     {noreply, State}
             end;
         E ->
-            error_and_reconnect(send, Master, IP, Port, E),
-            {noreply, State}
+            noreply_and_reconnect(send, Master, IP, Port, E, State)
     end;
 
 handle_info(_Info, State) ->
@@ -95,6 +135,14 @@ terminate(Reason, #state{name = Name, socket=Socket}) ->
 
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
+
+noreply_and_reconnect(Type, Master, IP, Port, E, State) ->
+    error_and_reconnect(Type, Master, IP, Port, E),
+    {noreply, State}.
+
+reply_and_reconnect(Type, Master, IP, Port, E, State) ->
+    error_and_reconnect(Type, Master, IP, Port, E),
+    {reply, E, State}.
 
 error_and_reconnect(Type, Master, IP, Port, E) ->
     lager:error("[MDNS Client:~p] ~s error on ~p:~p: ~p",

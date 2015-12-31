@@ -4,10 +4,13 @@
          instance/1,
          call/2,
          call/3,
+         stream/4,
          cast/2,
          sure_cast/2,
          servers/1
         ]).
+
+-type stream_fun() :: fun(({stream, term} | done) ->  ok).
 %%--------------------------------------------------------------------
 %% @doc
 %% Creates a new instance of a mdns client library, this should
@@ -48,6 +51,23 @@ call(Pid, Msg) ->
 
 call(Pid, Msg, Timeout) ->
     mdns_client_lib_server:call(Pid, Msg, Timeout).
+
+
+%%--------------------------------------------------------------------
+%% @doc
+%% Streams data from the client, for each chunk StreamFn is called.
+%%
+%% @end
+%%--------------------------------------------------------------------
+
+-spec stream(Pid::pid(), Msg::term(), StreamFn :: stream_fun(),
+             Timeout :: pos_integer() | infinity) ->
+                  noreply |
+                  {error, no_servers} |
+                  {reply, Reply::term()}.
+
+stream(Pid, Msg, StreamFn, Timeout) ->
+    mdns_client_lib_server:stream(Pid, Msg, StreamFn, Timeout).
 
 %%--------------------------------------------------------------------
 %% @doc
