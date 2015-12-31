@@ -162,12 +162,8 @@ test_worker(_, #state{worker = Worker, service=Service} = State) ->
 
 do(_, #state{from = From, command = Command, worker = Worker,
              timeout = Timeout, type = {stream, StreamFn, Acc0}} = State) ->
-    case gen_server:call(Worker, {stream, Command, StreamFn, Acc0, Timeout}) of
-        {ok, Res} ->
-            gen_server:reply(From, binary_to_term(Res));
-        E ->
-            gen_server:reply(From, {error, E})
-    end,
+    Res = gen_server:call(Worker, {stream, Command, StreamFn, Acc0, Timeout}),
+    gen_server:reply(From, Res),
     {stop, normal, State};
 
 do(_, #state{from = undefined, command = Command, worker = Worker,
