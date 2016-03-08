@@ -112,7 +112,7 @@ sure_cast(Pid, Message) ->
     {error, no_servers}.
 
 stream(Pid, Message, StreamFn, Acc0, Timeout) ->
-    gen_server:call(Pid, {stream, Message, StreamFn, Acc0, Timeout}).
+    gen_server:call(Pid, {stream, Message, StreamFn, Acc0, Timeout}, Timeout).
 
 -spec get_server(pid()) ->
                         {ok, mdns_server()} |
