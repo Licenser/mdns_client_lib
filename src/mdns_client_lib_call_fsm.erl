@@ -104,7 +104,7 @@ init([Service, Handler, Command, From, InTimeout, Type]) ->
                   {V, _} ->
                       V
               end,
-
+    next(),
     {ok, get_worker, #state{
                         timeout = Timeout,
                         max_retries = Retries,
@@ -114,7 +114,7 @@ init([Service, Handler, Command, From, InTimeout, Type]) ->
                         handler = Handler,
                         type = Type,
                         from = From
-                       }, 0}.
+                       }}.
 
 get_worker(_, State = #state{retry = R, max_retries = M})
   when R > M ->
@@ -126,54 +126,61 @@ get_worker(_, State = #state{service=Service, retry=Retry,
         {error_no_group, G} ->
             lager:warning("[MDNS Client:~s] Group ~p does not exist.",
                           [Service, G]),
-            {next_state, get_worker, State#state{retry = Retry + 1},
-             random:uniform(Deleay)};
+            next(random:uniform(Deleay)),
+            {next_state, get_worker, State#state{retry = Retry + 1}};
+
         error_no_members ->
             lager:warning("[MDNS Client:~p] Service has no free members.",
                           [Service]),
-            {next_state, get_worker, State#state{retry = Retry + 1},
-             random:uniform(Deleay)};
+            next(random:uniform(Deleay)),
+            {next_state, get_worker, State#state{retry = Retry + 1}};
         Worker ->
+            next(),
             {next_state, test_worker,
-             State#state{worker = Worker, retry = Retry + 1}, 0}
+             State#state{worker = Worker, retry = Retry + 1}}
     end;
 
 get_worker(_, State = #state{service=Service, worker = Worker}) ->
     pooler:return_group_member(Service, Worker),
-    {next_state, get_worker, State#state{worker = undefined}, 0}.
+    next(),
+    {next_state, get_worker, State#state{worker = undefined}}.
 
 test_worker(_, #state{worker = Worker, service=Service} = State) ->
     case gen_server:call(Worker, {call, ping, 500}) of
         {ok, Res} ->
             case binary_to_term(Res) of
                 pong ->
-                    {next_state, do, State, 0};
+                    next(),
+                    {next_state, do, State};
                 E ->
                     lager:warning("[MDNS Client: ~p] Test for worker failed, "
                                   "no pong returned: ~p.",
                                   [Service, E]),
-                    {next_state, get_worker, State, 0}
+                    next(),
+                    {next_state, get_worker, State}
             end;
         E ->
             lager:warning("[MDNS Client: ~p] Test for worker failed: ~p.",
                           [Service, E]),
-            {next_state, get_worker, State, 0}
+            next(),
+            {next_state, get_worker, State}
     end.
 
 do(_, #state{from = From, command = Command, worker = Worker,
              timeout = Timeout, type = {stream, StreamFn, Acc0}} = State) ->
-    Res = gen_server:call(Worker, {stream, Command, StreamFn, Acc0, Timeout}),
+    Res = gen_server:call(Worker, {stream, Command, StreamFn, Acc0, Timeout},
+                          Timeout),
     gen_server:reply(From, Res),
     {stop, normal, State};
 
 do(_, #state{from = undefined, command = Command, worker = Worker,
              timeout = Timeout} = State) ->
-    gen_server:call(Worker, {call, Command, Timeout}),
+    gen_server:call(Worker, {call, Command, Timeout}, Timeout),
     {stop, normal, State};
 
 do(_, #state{from = From, command = Command, worker = Worker,
              timeout = Timeout} = State) ->
-    case gen_server:call(Worker, {call, Command, Timeout}) of
+    case gen_server:call(Worker, {call, Command, Timeout}, Timeout) of
         {ok, Res} ->
             gen_server:reply(From, binary_to_term(Res)),
             {stop, normal, State};
@@ -283,3 +290,9 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+next(After) ->
+    gen_fsm:send_event_after(After, next).
+
+next() ->
+    next(0).

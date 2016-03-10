@@ -94,7 +94,12 @@ read_stream1(StreamFn, Timeout, AccIn,
 handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
                                       ip = IP, port = Port}) ->
     mdns_client_lib_server:downvote_endpoint(Master, Name),
-    gen_tcp:close(S0),
+    case S0 of
+        undefined ->
+            ok;
+        _ ->
+            gen_tcp:close(S0)
+    end,
     case gen_tcp:connect(IP, Port, ?OPTS, 250) of
         {ok, Socket} ->
             {noreply, State#state{socket = Socket}};
