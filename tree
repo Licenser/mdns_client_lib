@@ -1,0 +1,5 @@
+[0m└─ mdns_client_lib─0.1.37
+   ├─ lager─2.1.1
+   │  └─ goldrush─0.1.7
+   ├─ mdns_client─0.1.7
+   └─ pooler─1.5.0

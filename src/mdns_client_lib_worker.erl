@@ -150,7 +150,7 @@ reply_and_reconnect(Type, Master, IP, Port, E, State) ->
     {reply, E, State}.
 
 error_and_reconnect(Type, Master, IP, Port, E) ->
-    lager:error("[MDNS Client:~p] ~s error on ~p:~p: ~p",
+    lager:error("[MDNS Client:~s] ~p error on ~s:~p: ~p",
                 [Type, Master, IP, Port, E]),
     reconnect(self()).
 
