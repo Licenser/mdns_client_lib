@@ -1,12 +1,4 @@
-{"1.1.0",
 [{<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.8">>},1},
  {<<"lager">>,{pkg,<<"lager">>,<<"3.2.1">>},0},
  {<<"mdns_client">>,{pkg,<<"mdns_client">>,<<"0.1.8">>},0},
- {<<"pooler">>,{pkg,<<"pooler">>,<<"1.5.0">>},0}]}.
-[
-{pkg_hash,[
- {<<"goldrush">>, <<"2024BA375CEEA47E27EA70E14D2C483B2D8610101B4E852EF7F89163CDB6E649">>},
- {<<"lager">>, <<"EEF4E18B39E4195D37606D9088EA05BF1B745986CF8EC84F01D332456FE88D17">>},
- {<<"mdns_client">>, <<"9BDE137935F7CAB917F79988396C03F773549A9F050E36F000EE68F330D66CF7">>},
- {<<"pooler">>, <<"0FD4BE5D2976E6A2E9A1617623031758C26F200C1FCA89E4A3C542747BEC6371">>}]}
-].
+ {<<"pooler">>,{pkg,<<"pooler">>,<<"1.5.0">>},0}].
