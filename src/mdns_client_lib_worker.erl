@@ -18,9 +18,8 @@ init([Name, IP, Port, Master]) ->
     %%timer:send_interval(1000, do_ping),
     lager:debug("[MDNS Client:~p] Initialization started.",
                 [Name]),
-    case gen_tcp:connect(IP, Port,
-                         ?OPTS,
-                         250) of
+    Opts = ?OPTS,
+    case gen_tcp:connect(IP, Port, Opts, 250) of
         {ok, Socket} ->
             lager:debug("[MDNS Client:~p] Initialization successful.",
                         [Name]),
@@ -100,7 +99,8 @@ handle_cast(reconnect, State = #state{socket = S0, name = Name, master=Master,
         _ ->
             gen_tcp:close(S0)
     end,
-    case gen_tcp:connect(IP, Port, ?OPTS, 250) of
+    Opts = ?OPTS,
+    case gen_tcp:connect(IP, Port, Opts, 250) of
         {ok, Socket} ->
             {noreply, State#state{socket = Socket}};
         E ->

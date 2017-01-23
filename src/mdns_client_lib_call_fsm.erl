@@ -90,9 +90,7 @@ cast(Service, Handler, Command) ->
 
 init([Service, Handler, Command, From, InTimeout, Type]) ->
     process_flag(trap_exit, true),
-    random:seed(erlang:phash2([node()]),
-                erlang:monotonic_time(),
-                erlang:unique_integer()),
+    rand:seed(exsplus),
 
     {ok, Retries} = application:get_env(max_retries),
     {ok, RetryDelay} = application:get_env(retry_delay),
@@ -126,13 +124,13 @@ get_worker(_, State = #state{service=Service, retry=Retry,
         {error_no_group, G} ->
             lager:warning("[MDNS Client:~s] Group ~p does not exist.",
                           [Service, G]),
-            next(random:uniform(Deleay)),
+            next(rand:uniform(Deleay)),
             {next_state, get_worker, State#state{retry = Retry + 1}};
 
         error_no_members ->
             lager:warning("[MDNS Client:~p] Service has no free members.",
                           [Service]),
-            next(random:uniform(Deleay)),
+            next(rand:uniform(Deleay)),
             {next_state, get_worker, State#state{retry = Retry + 1}};
         Worker ->
             next(),
