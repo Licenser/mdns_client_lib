@@ -1,13 +1,10 @@
-REBAR = rebar3
+REBAR = ./rebar3
 
 .PHONY: all test
 
-all: compile
+all: compile dialyzer
 
 include fifo.mk
 
-clean:
-	$(REBAR) clean
-
 eunit:
-	$(REBAR) eunit
+	@$(REBAR) eunit
