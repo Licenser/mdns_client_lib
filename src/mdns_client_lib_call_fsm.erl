@@ -8,7 +8,7 @@
 %%%-------------------------------------------------------------------
 -module(mdns_client_lib_call_fsm).
 
--behaviour(gen_fsm).
+-behaviour(gen_statem).
 
 %% API
 -export([
@@ -22,17 +22,10 @@
 
 %% gen_fsm callbacks
 -export([init/1,
-         handle_event/3,
-         handle_sync_event/4,
-         handle_info/3,
+         callback_mode/0,
+         handle_event/4,
          terminate/3,
          code_change/4]).
-
--export([
-         get_worker/2,
-         test_worker/2,
-         do/2
-        ]).
 
 -define(SERVER, ?MODULE).
 -record(state, {service, handler, command, from, socket, type, retry = 0,
@@ -55,9 +48,9 @@
 %%--------------------------------------------------------------------
 
 start_link(Service, Handler, Command, From, Timeout, Type) ->
-    gen_fsm:start_link(?MODULE,
-                       [list_to_atom(Service), Handler, Command,
-                        From, Timeout, Type], []).
+    gen_statem:start_link(?MODULE,
+                          [list_to_atom(Service), Handler, Command,
+                           From, Timeout, Type], []).
 
 call(Service, Handler, Command, From) ->
     supervisor:start_child(
@@ -102,7 +95,6 @@ init([Service, Handler, Command, From, InTimeout, Type]) ->
                   {V, _} ->
                       V
               end,
-    next(),
     {ok, get_worker, #state{
                         timeout = Timeout,
                         max_retries = Retries,
@@ -112,72 +104,79 @@ init([Service, Handler, Command, From, InTimeout, Type]) ->
                         handler = Handler,
                         type = Type,
                         from = From
-                       }}.
+                       }, next()}.
 
-get_worker(_, State = #state{retry = R, max_retries = M})
+callback_mode() ->
+    handle_event_function.
+
+handle_event({timeout, next}, next, get_worker,
+             State = #state{retry = R, max_retries = M})
   when R > M ->
     {stop, {error, no_connection}, State};
 
-get_worker(_, State = #state{service=Service, retry=Retry,
-                             worker=undefined, retry_delay = Deleay}) ->
+handle_event({timeout, next}, next, get_worker,
+             State = #state{service=Service, retry=Retry,
+                            worker=undefined, retry_delay = Deleay}) ->
     case pooler:take_group_member(Service) of
         {error_no_group, G} ->
             lager:warning("[MDNS Client:~s] Group ~p does not exist.",
                           [Service, G]),
-            next(rand:uniform(Deleay)),
-            {next_state, get_worker, State#state{retry = Retry + 1}};
+            {next_state, get_worker, State#state{retry = Retry + 1},
+             next(rand:uniform(Deleay))};
 
         error_no_members ->
             lager:warning("[MDNS Client:~p] Service has no free members.",
                           [Service]),
-            next(rand:uniform(Deleay)),
-            {next_state, get_worker, State#state{retry = Retry + 1}};
+            {next_state, get_worker, State#state{retry = Retry + 1},
+             next(rand:uniform(Deleay))};
+
         Worker ->
-            next(),
             {next_state, test_worker,
-             State#state{worker = Worker, retry = Retry + 1}}
+             State#state{worker = Worker, retry = Retry + 1},
+             next()}
     end;
 
-get_worker(_, State = #state{service=Service, worker = Worker}) ->
+handle_event({timeout, next}, next, get_worker,
+             State = #state{service=Service, worker = Worker}) ->
     pooler:return_group_member(Service, Worker),
-    next(),
-    {next_state, get_worker, State#state{worker = undefined}}.
+    {next_state, get_worker, State#state{worker = undefined}, next()};
 
-test_worker(_, #state{worker = Worker, service=Service} = State) ->
+handle_event({timeout, next}, next, test_worker,
+             State = #state{worker = Worker, service=Service}) ->
     case gen_server:call(Worker, {call, ping, 500}) of
         {ok, Res} ->
             case binary_to_term(Res) of
                 pong ->
-                    next(),
-                    {next_state, do, State};
+                    {next_state, do, State, next()};
                 E ->
                     lager:warning("[MDNS Client: ~p] Test for worker failed, "
                                   "no pong returned: ~p.",
                                   [Service, E]),
-                    next(),
-                    {next_state, get_worker, State}
+                    {next_state, get_worker, State, next()}
             end;
         E ->
             lager:warning("[MDNS Client: ~p] Test for worker failed: ~p.",
                           [Service, E]),
-            next(),
-            {next_state, get_worker, State}
-    end.
+            {next_state, get_worker, State, next()}
+    end;
 
-do(_, #state{from = From, command = Command, worker = Worker,
-             timeout = Timeout, type = {stream, StreamFn, Acc0}} = State) ->
+handle_event({timeout, next}, next, do,
+   State = #state{from = From, command = Command, worker = Worker,
+                  timeout = Timeout, type = {stream, StreamFn, Acc0}}) ->
     Res = gen_server:call(Worker, {stream, Command, StreamFn, Acc0, Timeout},
                           Timeout),
     gen_server:reply(From, Res),
     {stop, normal, State};
 
-do(_, #state{from = undefined, command = Command, worker = Worker,
-             timeout = Timeout} = State) ->
+handle_event({timeout, next}, next, do,
+             State = #state{from = undefined, command = Command,
+                            worker = Worker, timeout = Timeout}) ->
     gen_server:call(Worker, {call, Command, Timeout}, Timeout),
     {stop, normal, State};
 
-do(_, #state{from = From, command = Command, worker = Worker,
-             timeout = Timeout} = State) ->
+handle_event({timeout, next}, next, do,
+             State = #state{from = From, command = Command, worker = Worker,
+                            timeout = Timeout}) ->
     case gen_server:call(Worker, {call, Command, Timeout}, Timeout) of
         {ok, Res} ->
             gen_server:reply(From, binary_to_term(Res)),
@@ -185,59 +184,12 @@ do(_, #state{from = From, command = Command, worker = Worker,
         E ->
             gen_server:reply(From, {error, E}),
             {stop, normal, State}
-    end.
+    end;
 
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:send_all_state_event/2, this function is called to handle
-%% the event.
-%%
-%% @spec handle_event(Event, StateName, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
-%% @end
-%%--------------------------------------------------------------------
-handle_event(_Event, StateName, State) ->
-    {next_state, StateName, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% Whenever a gen_fsm receives an event sent using
-%% gen_fsm:sync_send_all_state_event/[2,3], this function is called
-%% to handle the event.
-%%
-%% @spec handle_sync_event(Event, From, StateName, State) ->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {reply, Reply, NextStateName, NextState} |
-%%                   {reply, Reply, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState} |
-%%                   {stop, Reason, Reply, NewState}
-%% @end
-%%--------------------------------------------------------------------
-handle_sync_event(_Event, _From, StateName, State) ->
-    Reply = ok,
-    {reply, Reply, StateName, State}.
-
-%%--------------------------------------------------------------------
-%% @private
-%% @doc
-%% This function is called by a gen_fsm when it receives any
-%% message other than a synchronous or asynchronous event
-%% (or a system message).
-%%
-%% @spec handle_info(Info,StateName,State)->
-%%                   {next_state, NextStateName, NextState} |
-%%                   {next_state, NextStateName, NextState, Timeout} |
-%%                   {stop, Reason, NewState}
-%% @end
-%%--------------------------------------------------------------------
-handle_info(_Info, StateName, State) ->
-    {next_state, StateName, State}.
+handle_event(EventType, Event, StateName, State) ->
+    lager:warning("Unhandled event in state ~p: ~p / ~p",
+                  [StateName, EventType, Event]),
+    {keep_state, State}.
 
 %%--------------------------------------------------------------------
 %% @private
@@ -290,7 +242,7 @@ code_change(_OldVsn, StateName, State, _Extra) ->
 %%%===================================================================
 
 next(After) ->
-    gen_fsm:send_event_after(After, next).
+    {{timeout, next}, After, next}.
 
 next() ->
     next(0).
